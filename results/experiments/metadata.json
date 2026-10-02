@@ -1,0 +1,87 @@
+{
+  "dataset": "Austrian Crop 17 classes",
+  "year": 2022,
+  "n_pixels": 8243147,
+  "embedding_dimension": 128,
+  "n_ground_truth_classes": 17,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "runs_per_configuration": 10,
+  "stability_pairs_per_configuration": 45,
+  "tee_sampling_policy": "min(max(5000, 500*k), N)",
+  "candidate_300k_policy": "min(max(5000, 300*k), N)",
+  "total_unique_configurations": 41,
+  "total_runs": 410,
+  "source_experiments": [
+    {
+      "name": "initial_sample_size_sweep",
+      "directory": "benchmark_results/k_sample_size_benchmark",
+      "group": "sample_size_sweep"
+    },
+    {
+      "name": "k17_tee_baseline",
+      "directory": "benchmark_results/k17_baseline_8500",
+      "group": "tee_baseline"
+    },
+    {
+      "name": "extended_k30",
+      "directory": "benchmark_results/k30_sample_size",
+      "group": "sample_size_sweep"
+    },
+    {
+      "name": "extended_k40",
+      "directory": "benchmark_results/k40_sample_size",
+      "group": "sample_size_sweep"
+    },
+    {
+      "name": "extended_k50",
+      "directory": "benchmark_results/k50_sample_size",
+      "group": "sample_size_sweep"
+    },
+    {
+      "name": "refinement_k30",
+      "directory": "benchmark_results/k30_refinement",
+      "group": "sample_size_refinement"
+    },
+    {
+      "name": "refinement_k40",
+      "directory": "benchmark_results/k40_refinement",
+      "group": "sample_size_refinement"
+    },
+    {
+      "name": "refinement_k50",
+      "directory": "benchmark_results/k50_refinement",
+      "group": "sample_size_refinement"
+    },
+    {
+      "name": "policy300_k17",
+      "directory": "benchmark_results/new_formula_k17",
+      "group": "policy_300k_validation"
+    },
+    {
+      "name": "policy300_k20",
+      "directory": "benchmark_results/new_formula_k20",
+      "group": "policy_300k_validation"
+    },
+    {
+      "name": "policy300_k30",
+      "directory": "benchmark_results/new_formula_k30",
+      "group": "policy_300k_validation"
+    },
+    {
+      "name": "policy300_k40",
+      "directory": "benchmark_results/new_formula_k40",
+      "group": "policy_300k_validation"
+    }
+  ]
+}
