@@ -1,0 +1,78 @@
+{
+ "HDBSCAN pca16 eom mcs=100 assign=knn": {
+  "k_found": 5.1,
+  "coherence": 0.9797822138280665,
+  "ARI_mean": 0.9876227550255925,
+  "ARI_min": 0.9664308574459463,
+  "max_share": 0.9330119047619047,
+  "k_eff": 1.4012669034024712,
+  "noise": 0.0901,
+  "t_fit": 1.0948317766189575,
+  "t_assign": 1.7437724828720094
+ },
+ "HDBSCAN pca16 eom mcs=100 assign=knn | k-means same k": {
+  "k_found": 5.1,
+  "coherence": 0.823921596978104,
+  "ARI_mean": 0.9040504035271872,
+  "ARI_min": 0.7511051505721437,
+  "max_share": 0.30414141414141416,
+  "k_eff": 4.542912026429244
+ },
+ "HDBSCAN pca16 leaf mcs=100 assign=knn": {
+  "k_found": 22.4,
+  "coherence": 0.582498847811746,
+  "ARI_mean": 0.6005715593842885,
+  "ARI_min": 0.46013069026804787,
+  "max_share": 0.11208405483405484,
+  "k_eff": 17.69531211748997,
+  "noise": 0.751965,
+  "t_fit": 1.072870635986328,
+  "t_assign": 0.5100332736968994
+ },
+ "HDBSCAN pca16 leaf mcs=100 assign=knn | k-means same k": {
+  "k_found": 22.4,
+  "coherence": 0.5928190205948003,
+  "ARI_mean": 0.8324877143860994,
+  "ARI_min": 0.7437758532489865,
+  "max_share": 0.09302741702741704,
+  "k_eff": 19.936178106707736
+ },
+ "HDBSCAN pca16 leaf mcs=100 assign=centroid": {
+  "k_found": 22.4,
+  "coherence": 0.5800359663470662,
+  "ARI_mean": 0.6421759340708262,
+  "ARI_min": 0.5100305078815435,
+  "max_share": 0.09687842712842712,
+  "k_eff": 18.865874371360633,
+  "noise": 0.751965,
+  "t_fit": 1.0739928007125854,
+  "t_assign": 0.025060415267944336
+ },
+ "HDBSCAN pca16 leaf mcs=100 assign=centroid | k-means same k": {
+  "k_found": 22.4,
+  "coherence": 0.5928190205948003,
+  "ARI_mean": 0.8324877143860994,
+  "ARI_min": 0.7437758532489865,
+  "max_share": 0.09302741702741704,
+  "k_eff": 19.936178106707736
+ },
+ "HDBSCAN pca16 leaf mcs=400 assign=knn": {
+  "k_found": 5.5,
+  "coherence": 0.8081157429580964,
+  "ARI_mean": 0.5685901294061388,
+  "ARI_min": 0.37711714238003685,
+  "max_share": 0.3634040404040404,
+  "k_eff": 4.588853804472615,
+  "noise": 0.7266199999999999,
+  "t_fit": 1.1137151956558227,
+  "t_assign": 0.5619221210479737
+ },
+ "HDBSCAN pca16 leaf mcs=400 assign=knn | k-means same k": {
+  "k_found": 5.5,
+  "coherence": 0.8152732267596852,
+  "ARI_mean": 0.6612120143348684,
+  "ARI_min": 0.42668990000143386,
+  "max_share": 0.32492676767676765,
+  "k_eff": 4.8533281777568815
+ }
+}

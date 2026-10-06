@@ -1,0 +1,255 @@
+<title>TEE Smoothing and HDBSCAN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root {
+  --bg: #f4f6f4;
+  --surface: #ffffff;
+  --ink: #15191a;
+  --ink-2: #4a5155;
+  --muted: #737b7f;
+  --rule: #dce1de;
+  --grid: #e7ebe8;
+  --smooth: #2a78d6;
+  --hdb: #eb6834;
+  --base: #858c90;
+  --merge: #1baf7a;
+  --verdict-bg: #e9f1fb;
+  --verdict-rule: #2a78d6;
+  --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --cond: "IBM Plex Sans Condensed", "Arial Narrow", "IBM Plex Sans", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111415; --surface: #181c1d; --ink: #eef1ef; --ink-2: #b8bfbc; --muted: #8b9390;
+    --rule: #2b3133; --grid: #242a2b; --smooth: #3987e5; --hdb: #d95926; --base: #98a0a3; --merge: #199e70;
+    --verdict-bg: #15263a; --verdict-rule: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111415; --surface: #181c1d; --ink: #eef1ef; --ink-2: #b8bfbc; --muted: #8b9390;
+  --rule: #2b3133; --grid: #242a2b; --smooth: #3987e5; --hdb: #d95926; --base: #98a0a3; --merge: #199e70;
+  --verdict-bg: #15263a; --verdict-rule: #3987e5;
+}
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); }
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+header { display: grid; gap: 10px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 600 clamp(30px, 5vw, 44px)/1.08 var(--cond); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.lede { font-size: 18px; color: var(--ink-2); max-width: 64ch; margin: 0; }
+.meta { font: 13px/1.5 var(--mono); color: var(--muted); }
+h2 { font: 600 26px/1.2 var(--cond); margin: 56px 0 6px; text-wrap: balance; }
+h3 { font: 600 17px/1.3 var(--sans); margin: 28px 0 4px; }
+p, li { max-width: 68ch; }
+p { margin: 10px 0; }
+.sub { color: var(--ink-2); margin-top: 0; }
+.verdict { margin-top: 28px; background: var(--verdict-bg); border-left: 3px solid var(--verdict-rule); padding: 18px 22px; display: grid; gap: 10px; }
+.verdict h2 { margin: 0; font-size: 20px; }
+.verdict ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+.verdict li { max-width: none; }
+b, strong { font-weight: 600; }
+.num { font-family: var(--mono); font-size: .92em; font-variant-numeric: tabular-nums; }
+figure { margin: 22px 0; }
+figcaption { font-size: 13.5px; color: var(--muted); margin-top: 8px; max-width: 72ch; }
+.maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.maps.two { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.maps figure { margin: 0; }
+.maps img { display: block; width: 100%; height: auto; image-rendering: pixelated; border: 1px solid var(--rule); }
+.maps figcaption { margin-top: 4px; font-size: 13px; color: var(--ink-2); }
+.maps figcaption b { color: var(--ink); }
+.key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+.key span { display: inline-flex; align-items: center; gap: 7px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.smooth { background: var(--smooth); } .dot.merge { background: var(--merge); } .dot.hdb { background: var(--hdb); } .dot.base { background: var(--base); }
+.swatch { width: 18px; height: 3px; display: inline-block; }
+.chart { background: var(--surface); border: 1px solid var(--rule); padding: 14px 12px 8px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font: 11px var(--mono); }
+.chart .axis { fill: var(--ink-2); font: 12px var(--sans); }
+.chart .lbl { fill: var(--ink); font: 12px var(--sans); }
+.chart .rowlbl { fill: var(--ink); font: 12.5px var(--sans); }
+.chart .pt circle { stroke: var(--surface); stroke-width: 2; }
+.chart .pt.smooth circle { fill: var(--smooth); } .chart .pt.merge circle { fill: var(--merge); } .chart .pt.hdb circle { fill: var(--hdb); } .chart .pt.base circle { fill: var(--base); }
+.chart .pt .rng { stroke-width: 3; stroke-linecap: round; }
+.chart .pt.smooth .rng { stroke: var(--smooth); } .chart .pt.merge .rng { stroke: var(--merge); } .chart .pt.hdb .rng { stroke: var(--hdb); } .chart .pt.base .rng { stroke: var(--base); }
+.chart .pt:hover circle { r: 7.5; }
+.tbl { overflow-x: auto; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font: 500 12px/1.3 var(--mono); letter-spacing: .03em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: bottom; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--rule); }
+td:not(:first-child), th:not(:first-child) { text-align: right; white-space: nowrap; }
+td:first-child { min-width: 15rem; }
+tr.base td:first-child { color: var(--ink-2); }
+tr.smooth td:first-child::before, tr.hdb td:first-child::before, tr.merge td:first-child::before, tr.base td:first-child::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+tr.smooth td:first-child::before { background: var(--smooth); } tr.merge td:first-child::before { background: var(--merge); } tr.hdb td:first-child::before { background: var(--hdb); } tr.base td:first-child::before { background: var(--base); }
+.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 28px; }
+.card { background: var(--surface); border: 1px solid var(--rule); padding: 16px 18px; }
+.card h3 { margin-top: 0; }
+.card p, .card li { font-size: 15px; }
+.steps { padding-left: 22px; display: grid; gap: 10px; }
+.note { font-size: 14px; color: var(--ink-2); }
+code, pre { font-family: var(--mono); font-size: 13px; }
+pre { background: var(--surface); border: 1px solid var(--rule); padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+.caveats li { margin-bottom: 6px; }
+a { color: var(--smooth); }
+a:focus-visible { outline: 2px solid var(--smooth); outline-offset: 2px; }
+@media (max-width: 620px) {
+  .maps, .maps.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body { font-size: 15px; }
+}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">TESSERA Clusterings · DAT300 / DIT616 · group 5</div>
+  <h1>Spatial smoothing, over-cluster + merge and HDBSCAN for TEE's clustering</h1>
+  <p class="lede">Can we make TEE's k-means maps less noisy by using neighbouring pixels, more stable by over-clustering and merging, and is HDBSCAN a better clusterer for cities? Tested on Gothenburg (TEE viewport, 2024) and an Austrian crop tile with 2 569 labelled fields.</p>
+  <div class="meta">Christopher Kröss · 30 Sep 2026 (over-cluster section added the same day) · code: <code>TESSERA/experiments/spatial_hdbscan/</code></div>
+</header>
+
+<section class="verdict" aria-labelledby="v">
+  <h2 id="v">Bottom line</h2>
+  <ol>
+    <li><b>Recommended pipeline: over-cluster to 32 → Ward merge → refine → light MRF smoothing.</b> Compared with TEE today, mean seed agreement (ARI) rises from <span class="num">{{N_ARI_G_BASE}}</span> to <span class="num">{{N_BEST_ARI_G}}</span> on Gothenburg and from <span class="num">{{N_ARI_A_BASE}}</span> to <span class="num">{{N_BEST_ARI_A}}</span> on Austria. Speckle inside fields falls from <span class="num">{{N_SPECKLE_BASE}}</span> to <span class="num">{{N_BEST_SPECKLE}}</span>. In the browser it should add roughly 0.5 s to today's run (estimate from the measured steps in section 6).</li>
+    <li><b>Smoothing works, it is cheap, and it fits into TEE's browser code.</b> A Gaussian pre-filter of 10 m or a light MRF cuts speckle from <span class="num">{{N_SPECKLE_BASE}}</span> to about <span class="num">{{N_SPECKLE_G10}}</span> and puts more of the remaining cluster edges on real field boundaries. A majority filter removes more speckle but also erases real edges. Smoothing does not make runs agree across seeds.</li>
+    <li><b>Over-cluster + merge on its own does not help.</b> Merging 32–128 centroids with Ward gives maps that fit the data slightly worse than k-means and are less stable than 10 restarts. Average linkage makes one giant cluster, and a spatial merge changes little. It only pays off as a starting point: a few k-means iterations from the merged centroids give the most stable maps of all methods tested, and they fit as well as 10 restarts.</li>
+    <li><b>HDBSCAN is not worth pursuing for TEE.</b> On Gothenburg it puts <span class="num">{{N_HDB_MAX}}</span> of all pixels into one cluster. The settings that split the city further mark about 50 to 75 % of the sample as noise and are less stable than k-means with the same number of clusters. TESSERA embeddings form a continuum without gaps in density, so a density-based method has little to find.</li>
+  </ol>
+</section>
+
+<h2>What was tested</h2>
+<p class="sub">Every method runs on the same embeddings, with the same metrics, over several seeds. Smoothing radii are given in metres, not pixels (see the note on TEE's grid below).</p>
+<div class="two-col">
+  <div class="card">
+    <h3>Data</h3>
+    <p><b>Gothenburg 2024</b>: the TEE viewport "Gteborg", 385 × 720 pixels, decoded exactly as TEE does (RVQ codebooks). No labels yet, so only unsupervised metrics and maps. {{N_SEEDS_G}} seeds, k = 5.</p>
+    <p><b>Austria, tile 16.75 E / 48.35 N</b>: 1 128 × 766 pixels at native 10 m (EPSG:32633), from TEE's compute cache. 438 419 pixels fall in 2 569 INVEKOS fields. {{N_SEEDS_A}} seeds, k = 17.</p>
+  </div>
+  <div class="card">
+    <h3>Methods</h3>
+    <p><b>Baselines:</b> TEE's k-means as in <code>segmentation.js</code>, and the same with 10 restarts (best inertia).</p>
+    <p><b>Smoothing</b> (on top of the restart version): majority filter on the label map; Gaussian or edge-aware bilateral filter on the embeddings before k-means; MRF / Potts smoothing solved with ICM.</p>
+    <p><b>Over-cluster + merge:</b> k-means with K0 = 32, 64 or 128 centroids, merged to k with Ward, average linkage or a spatially weighted Ward; optionally refined with k-means iterations from the merged centroids.</p>
+    <p><b>HDBSCAN:</b> PCA (8, 16, 32 dims) or UMAP on a 20 000-pixel sample, HDBSCAN on the sample, then every pixel takes the label of its nearest sample points.</p>
+  </div>
+</div>
+
+<h2>1 · Smoothing removes speckle</h2>
+<p class="sub">Gothenburg city centre, about 1.6 × 1.6 km, seed 42, k = 5. Colours are matched between panels.</p>
+<div class="maps">
+  <figure>{{G_TEE}}<figcaption><b>TEE today</b> (one run)</figcaption></figure>
+  <figure>{{G_NINIT}}<figcaption><b>10 restarts</b>, no smoothing</figcaption></figure>
+  <figure>{{G_MODE}}<figcaption><b>Majority filter</b> 20 m</figcaption></figure>
+  <figure>{{G_GAUSS}}<figcaption><b>Gaussian pre-filter</b> 10 m</figcaption></figure>
+  <figure>{{G_ICM}}<figcaption><b>MRF / Potts</b> β 0.5</figcaption></figure>
+  <figure>{{G_HDB}}<figcaption><b>HDBSCAN</b> PCA 16: nearly one cluster</figcaption></figure>
+</div>
+<p>The first two panels differ only in the k-means initialisation, which shows how much of the map depends on the seed today. Every smoothing variant turns the speckled patches into coherent areas. The majority filter produces the roundest blobs and erases thin structures first.</p>
+
+<h2>2 · Which smoothing keeps real edges</h2>
+<p class="sub">Fewer cluster changes inside a field are good. Fewer cluster changes across a field boundary are bad. The field polygons let us measure both on the Austrian tile.</p>
+<figure class="chart">
+  {{SCATTER}}
+  <div class="key"><span><i class="dot base"></i>k-means baselines</span><span><i class="dot smooth"></i>smoothing variants</span><span><i class="dot merge"></i>over-cluster + merge</span><span><i class="dot hdb"></i>HDBSCAN</span></div>
+</figure>
+<p><b>Speckle</b> (x-axis) is the share of neighbouring pixel pairs inside one field that get different clusters. <b>Edge ratio</b> (y-axis) is how much more often clusters change across a field boundary than inside a field. A method that only removes noise moves left and up. A method that blurs everything moves left and down.</p>
+<ul>
+  <li>TEE today: speckle <span class="num">{{N_SPECKLE_BASE}}</span>, edge ratio <span class="num">{{N_RATIO_BASE}}×</span>.</li>
+  <li>Gaussian pre-filter 10 m: speckle <span class="num">{{N_SPECKLE_G10}}</span>, edge ratio <span class="num">{{N_RATIO_G10}}×</span>. This is the best trade-off. MRF β 0.25 is almost identical (<span class="num">{{N_SPECKLE_ICM}}</span>, <span class="num">{{N_RATIO_ICM}}×</span>).</li>
+  <li>Majority filter 20 m: the least speckle (<span class="num">{{N_SPECKLE_M20}}</span>), but the edge ratio drops to <span class="num">{{N_RATIO_M20}}×</span>. It also erases field boundaries, so small objects like roads and narrow fields are at risk.</li>
+</ul>
+<div class="maps two">
+  <figure>{{A_TEE}}<figcaption><b>TEE today</b>: cluster edges</figcaption></figure>
+  <figure>{{A_GAUSS}}<figcaption><b>Gaussian 10 m</b></figcaption></figure>
+  <figure>{{A_MODE}}<figcaption><b>Majority 20 m</b></figcaption></figure>
+</div>
+<p class="note">3.2 × 3.2 km crop. Dark lines are where the cluster changes between neighbouring pixels, light blue lines are field boundaries from INVEKOS.</p>
+<div class="tbl">{{AUT_TABLE}}</div>
+<p class="note">Field homogeneity is the pixel-weighted share of each field that falls in its most common cluster (TEE today {{N_FH_BASE}}, Gaussian 10 m {{N_FH_G10}}, majority 20 m {{N_FH_M20}}). Speckle and edge ratio use seed 42; the other columns are means over the seeds.</p>
+
+<h2>3 · Stability comes from restarts, not from smoothing</h2>
+<p class="sub">If you run the same method with different seeds, how similar are the maps? An ARI of 1 means identical maps.</p>
+<figure class="chart">{{STAB_GBG}}<figcaption>Gothenburg, k = 5. HDBSCAN looks very stable only because almost all pixels are in one cluster.</figcaption></figure>
+<figure class="chart">{{STAB_AUT}}<figcaption>Austria, k = 17. Restarts raise mean ARI from {{N_ARI_A_BASE}} to {{N_ARI_A_RST}}; with 17 clusters, some variation between seeds remains.</figcaption></figure>
+<p>Smoothing only changes pixels near the decision boundaries. If one seed merges the river with the city and another seed does not, smoothing both maps leaves them just as different. The Gaussian and bilateral pre-filters can help a little on Gothenburg because they make the embedding clouds tighter, but the effect is not consistent on Austria. To make the maps stable, TEE needs restarts or a better initialisation, and section 5 shows an even better one. The smoothing step then comes on top.</p>
+
+<h2>4 · HDBSCAN finds no land-cover classes</h2>
+<p class="sub">All seven settings from the main run, on both datasets. "Effective k" is the exponential of the entropy of the cluster shares: it counts how many clusters actually matter.</p>
+<div class="tbl">{{HDB_TABLE}}</div>
+<p>With the default cluster selection (EOM), HDBSCAN on Gothenburg returns about {{N_HDB_K}} clusters, but one of them holds {{N_HDB_MAX}} of all pixels. On Austria, {{N_HDB_A_NOISE}} of the sample is noise, and the worst pair of seeds agrees at ARI {{N_HDB_A_ARIMIN}}. A smaller <code>min_cluster_size</code> or a UMAP projection splits the data into dozens to hundreds of fragments and labels half of the sample as noise.</p>
+<h3>Follow-up: "leaf" selection and k-means with the same number of clusters</h3>
+<p>The standard fix for one giant cluster is <code>cluster_selection_method="leaf"</code>. For a fair comparison, each HDBSCAN result is paired with k-means (10 restarts) using the number of clusters HDBSCAN found.</p>
+<div class="tbl">{{HDB_EXTRA}}</div>
+<p>Leaf selection splits Gothenburg into about 20 clusters, but most of the sample becomes noise, and k-means with the same k is more stable. On Austria, HDBSCAN is closer: at the same k its fields are more uniform than with k-means, but mostly because it makes a few very large clusters (see "Largest"). It also changes cluster less often across field boundaries and is less stable in every pairing. The embeddings of a city or a farm region are one continuous cloud, not separate dense groups. Density-based methods are designed for the second case. This also answers the "DBSCAN for cities" idea from the 24 Sep meeting.</p>
+
+<h2>5 · Over-cluster + merge: useful only as a starting point</h2>
+<p class="sub">k-means with many centroids (K0), then the K0 centroids are merged pairwise down to k. Ward merges the pair that increases the within-cluster variance the least. Average linkage merges by mean centroid distance. Spatial Ward also favours pairs that share a lot of boundary on the map. "Refine" runs up to 20 k-means iterations on the sample, starting from the merged group means.</p>
+<div class="tbl">{{OV_TABLE}}</div>
+<p class="note">ARI = mean agreement between seeds ({{N_SEEDS_G}} seeds Gothenburg, {{N_SEEDS_A}} Austria). "Fit vs restarts" = within-cluster variance on all pixels relative to k-means with 10 restarts (lower is better). Speckle and edge ratio are means over the seeds.</p>
+<figure class="chart">{{OV_STAB_GBG}}<figcaption>Gothenburg, k = 5.</figcaption></figure>
+<figure class="chart">{{OV_STAB_AUT}}<figcaption>Austria, k = 17.</figcaption></figure>
+<div class="maps">
+  <figure>{{G_OV64}}<figcaption><b>Over-cluster 64 → Ward</b></figcaption></figure>
+  <figure>{{G_OVAVG}}<figcaption><b>Over-cluster 64 → average link</b>: one cluster dominates</figcaption></figure>
+  <figure>{{G_OVBEST}}<figcaption><b>Recommended pipeline</b></figcaption></figure>
+</div>
+<ul>
+  <li><b>Merging alone:</b> over-cluster 32 → Ward is more stable than TEE today on Gothenburg ({{N_OV32_ARI_G}}), but not more stable than 10 restarts, and on Austria it barely changes (ARI {{N_OV32_ARI_A}}). More centroids do not help: K0 = 128 is less stable on Austria ({{N_OV128_ARI_A}}). The merged groups also fit the data slightly worse than k-means, because Ward only sees the centroids and never moves a pixel.</li>
+  <li><b>Average linkage</b> joins everything into one big group ({{N_AVG_MAX_G}} of the pixels in Gothenburg). It looks smooth, but only because most of the map has one colour, like HDBSCAN.</li>
+  <li><b>Spatial Ward</b> (merge clusters that touch a lot) changes almost nothing. Merging acts on 32–64 cluster centroids, so it cannot fix pixel-level noise.</li>
+  <li><b>Merge, then refine:</b> the merged centroids are a very good starting point for k-means. ARI reaches {{N_REF_ARI_G}} on Gothenburg and {{N_REF_ARI_A}} on Austria, both higher than 10 restarts, with the same fit. This works with a 10 000-pixel over-clustering sample. The Ward weights here come from all pixels; building them from the sample alone (needed for the fast browser version) should behave the same but is not tested yet. It is a known idea: hierarchical or refined starting points for k-means (Milligan 1980; Bradley &amp; Fayyad 1998).</li>
+  <li><b>Plus smoothing:</b> MRF β 0.25 on top keeps the stability (ARI {{N_BEST_ARI_A}} on Austria) and brings speckle down to {{N_BEST_SPECKLE}} with an edge ratio of {{N_BEST_RATIO}}×. The Gaussian pre-filter lowers stability on Austria (see table), probably because blurred pixels at field edges connect similar crop clusters. So MRF is the better partner here.</li>
+</ul>
+<div class="maps two">
+  <figure>{{A_TEE}}<figcaption><b>TEE today</b>: cluster edges</figcaption></figure>
+  <figure>{{A_OVBEST}}<figcaption><b>Recommended pipeline</b></figcaption></figure>
+  <figure>{{A_GAUSS}}<figcaption><b>Gaussian 10 m</b> (for comparison)</figcaption></figure>
+</div>
+<p>A merge tree has one more benefit: it contains the result for every k. TEE could show a k slider that changes the map without re-running k-means: relabelling the pixels from the tree takes milliseconds. This is a usability feature, not an accuracy gain.</p>
+
+<h2>6 · Does it run in the browser?</h2>
+<p class="sub">Node, one thread, which is the same as one Web Worker. The k-means row runs TEE's own worker code, extracted unchanged from <code>segmentation.js</code>.</p>
+<div class="tbl">{{JS_TABLE}}</div>
+<ul>
+  <li><b>Smoothing:</b> the majority filter uses one integral image per cluster, so it is O(N · k) and takes {{N_JS_MODE5}}–{{N_JS_MODE17}} ms. The MRF needs the distance of each pixel to every centroid, which the worker already computes in its final assignment pass, so keeping them costs nothing extra. The Gaussian pre-filter touches all 128 channels ({{N_JS_GAUSS}} ms) but runs only once per viewport and can be cached across k and seed changes.</li>
+  <li><b>Over-cluster + merge:</b> TEE's sample rule (500 × k pixels) makes over-clustering expensive: K0 = 32 takes {{N_JS_OV32_FULL}} s, mostly for assigning every pixel to 32 centroids. The pipeline does not need that pass. Over-clustering only the 10 000-pixel sample takes {{N_JS_OV32_S}} ms, the Ward merge about {{N_JS_WARD64}} ms, and the refine step and final assignment cost the same as today's k-means.</li>
+  <li><b>HDBSCAN:</b> the npm package <code>hdbscan-ts</code> builds a full n × n JavaScript array and needs {{N_JS_TS2}} for 2 000 points, so it cannot be used. A lean implementation without the matrix needs {{N_JS_H10}} for a 10 000-point sample and {{N_JS_H20}} for 20 000, plus the assignment of all pixels. That would be possible in a worker, but it would bring the quality problems above to the browser.</li>
+</ul>
+
+<h2>7 · How to proceed</h2>
+<ol class="steps">
+  <li><b>Replace TEE's single k-means++ run with the merge-then-refine start:</b> over-cluster to 32 on a 10 000-pixel sample, merge with Ward, then run the existing Lloyd loop from the merged centroids. It is the most stable method tested and costs about 0.4 s more in the browser. Keep the seed input so runs stay reproducible.</li>
+  <li><b>Add smoothing as a UI option</b> "Spatial smoothing: off / light / strong". Light = MRF β 0.25, strong = MRF β 0.5, both using the distances the worker already computes. The majority filter is a cheap fallback. Define all windows in metres from the geotransform, not in pixels.</li>
+  <li><b>Offer a k slider from the merge tree</b> as an optional usability feature, and mention it in the upstream PR.</li>
+  <li><b>Coordinate with Elias:</b> this section overlaps with his part. He can check the results, extend the sweep (other K0, number of refine iterations, sample sizes), and own the <code>segmentation.js</code> port of the merge step.</li>
+  <li><b>Evaluate the class-level effect with 2022 embeddings.</b> The Austrian labels are from 2022, but TEE's cache holds 2024 embeddings. Field geometry barely changes between years, so the field metrics above are valid. Crops rotate, though, so crop-class AMI (about 0.08 here) is not meaningful until the 2022 tiles are downloaded (about 110 MB per tile).</li>
+  <li><b>Test small objects on Gothenburg</b> once the hand labels (roads, buildings, river) are exported. That is where smoothing can do harm, and Austria's large fields cannot show it.</li>
+  <li><b>Report HDBSCAN and plain merging as negative results</b>, and keep them out of the TEE implementation.</li>
+</ol>
+
+<h2>Caveats</h2>
+<ul class="caveats">
+  <li><b>TEE's grid is not square:</b> Gothenburg pixels are about 7 m wide and 13 m tall, because TEE resamples to latitude/longitude. 30 % of horizontal and 17 % of vertical neighbour pairs are exact duplicates, which inflates coherence scores in TEE's grid. That is why the quantitative field metrics use the native 10 m Austrian tile.</li>
+  <li><b>Different random number generator:</b> the Python baseline uses NumPy's RNG instead of TEE's mulberry32, so ARI values differ from the 26 Sep measurement (mean 0.79 over seeds 1–20). The pattern (restarts ≫ smoothing) holds in both datasets.</li>
+  <li><b>Single seed for edge metrics:</b> speckle and edge ratio were computed on the seed-42 maps; the differences between the best methods (1.87–1.91×) are within the expected seed noise.</li>
+  <li><b>Over-cluster runs:</b> K0 centroids use TEE's sample rule (500 × K0) unless marked "10 000 px". Fit is measured as within-cluster variance on the raw embeddings, averaged over the first five seeds.</li>
+  <li><b>One tile only:</b> the Austrian results come from one tile of about 866 000 pixels, which is the 10 % development subset Romaric suggested. Full-size runs belong in the final experiments.</li>
+</ul>
+
+<h2>Reproduce</h2>
+<pre>cd TESSERA/experiments/spatial_hdbscan
+~/tee-local/venv/bin/python run_experiments.py gbg 20     # Gothenburg, 20 seeds
+~/tee-local/venv/bin/python run_experiments.py aut 10     # Austria tile, 10 seeds
+~/tee-local/venv/bin/python run_hdbscan_extra.py gbg 10
+~/tee-local/venv/bin/python run_hdbscan_extra.py aut 5
+~/tee-local/venv/bin/python run_overcluster.py gbg 20; ~/tee-local/venv/bin/python run_overcluster.py aut 10
+node bench_js.mjs "" smooth; node bench_js.mjs "" gauss; node bench_js.mjs &lt;hdbscan-ts&gt; hdbscan
+node bench_js.mjs "" overcluster; node bench_js.mjs "" overcluster2
+~/tee-local/venv/bin/python make_figures.py &amp;&amp; ~/tee-local/venv/bin/python build_report.py</pre>
+<p class="note">Needs the Gothenburg viewport and Austria tiles in <code>~/tee_data</code> (open them once in TEE) and TEE's venv (NumPy, scikit-learn 1.9, SciPy, rasterio, geopandas, umap-learn). Keep logs outside OneDrive (writing them inside the synced folder crashed one run). References: Ward 1963 (Ward linkage); Milligan 1980 and Bradley &amp; Fayyad 1998 (hierarchical / refined starting points for k-means); Besag 1986 (ICM); Tomasi &amp; Manduchi 1998 (bilateral filter); Campello et al. 2013 and McInnes et al. 2017 (HDBSCAN).</p>
+</div>

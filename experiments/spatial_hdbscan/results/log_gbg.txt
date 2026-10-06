@@ -1,0 +1,23 @@
+kmeans (TEE)                       k_found=5.000 coherence=0.814 ARI_mean=0.633 ARI_min=0.323 min_share=0.071 max_share=0.310 k_eff=4.477 t=0.041
+kmeans n_init=10                   k_found=5.000 coherence=0.826 ARI_mean=0.929 ARI_min=0.767 min_share=0.059 max_share=0.304 k_eff=4.459 t=0.135
+TEE kmeans + post mode r=20m       k_found=5.000 coherence=0.916 ARI_mean=0.610 ARI_min=0.300 min_share=0.072 max_share=0.328 k_eff=4.424 t=0.009
+TEE kmeans + ICM beta=0.5          k_found=5.000 coherence=0.902 ARI_mean=0.620 ARI_min=0.303 min_share=0.071 max_share=0.327 k_eff=4.427 t=0.041
+post mode r=10m x1                 k_found=5.000 coherence=0.885 ARI_mean=0.924 ARI_min=0.760 min_share=0.059 max_share=0.315 k_eff=4.436 t=0.009
+post mode r=20m x1                 k_found=5.000 coherence=0.921 ARI_mean=0.917 ARI_min=0.751 min_share=0.060 max_share=0.323 k_eff=4.423 t=0.009
+post mode r=20m x3                 k_found=5.000 coherence=0.944 ARI_mean=0.912 ARI_min=0.745 min_share=0.061 max_share=0.331 k_eff=4.410 t=0.027
+post mode r=40m x1                 k_found=5.000 coherence=0.944 ARI_mean=0.916 ARI_min=0.756 min_share=0.062 max_share=0.329 k_eff=4.418 t=0.009
+pre gauss sigma=5m                 k_found=5.000 coherence=0.858 ARI_mean=0.941 ARI_min=0.827 min_share=0.060 max_share=0.317 k_eff=4.438 t=0.158 t_pre=0.337
+pre gauss sigma=10m                k_found=5.000 coherence=0.898 ARI_mean=0.953 ARI_min=0.901 min_share=0.060 max_share=0.333 k_eff=4.394 t=0.159 t_pre=0.385
+pre gauss sigma=20m                k_found=5.000 coherence=0.934 ARI_mean=0.959 ARI_min=0.921 min_share=0.059 max_share=0.348 k_eff=4.336 t=0.150 t_pre=0.459
+pre bilateral r=10m x2             k_found=5.000 coherence=0.864 ARI_mean=0.936 ARI_min=0.819 min_share=0.060 max_share=0.313 k_eff=4.451 t=0.166 t_pre=0.488
+pre bilateral r=20m x1             k_found=5.000 coherence=0.870 ARI_mean=0.936 ARI_min=0.858 min_share=0.061 max_share=0.319 k_eff=4.440 t=0.175 t_pre=0.784
+MRF/ICM beta=0.25                  k_found=5.000 coherence=0.894 ARI_mean=0.926 ARI_min=0.771 min_share=0.060 max_share=0.322 k_eff=4.424 t=0.042
+MRF/ICM beta=0.5                   k_found=5.000 coherence=0.906 ARI_mean=0.924 ARI_min=0.766 min_share=0.060 max_share=0.325 k_eff=4.414 t=0.041
+MRF/ICM beta=1.0                   k_found=5.000 coherence=0.914 ARI_mean=0.920 ARI_min=0.755 min_share=0.059 max_share=0.325 k_eff=4.411 t=0.040
+bilateral r=10m x2 + ICM 0.5       k_found=5.000 coherence=0.908 ARI_mean=0.932 ARI_min=0.815 min_share=0.060 max_share=0.326 k_eff=4.420 t=0.041 t_pre=0.488
+HDBSCAN pca8 mcs=100               k_found=5.250 coherence=0.980 ARI_mean=0.969 ARI_min=0.934 min_share=0.010 max_share=0.936 k_eff=1.389 t=1.504 n_clusters=5.250 noise=0.065 t_fit=0.705 t_assign=0.798 min_cluster_size=100.000
+HDBSCAN pca16 mcs=100              k_found=5.250 coherence=0.980 ARI_mean=0.981 ARI_min=0.929 min_share=0.010 max_share=0.934 k_eff=1.400 t=2.150 n_clusters=5.250 noise=0.090 t_fit=1.111 t_assign=1.039 min_cluster_size=100.000
+HDBSCAN pca32 mcs=100              k_found=5.900 coherence=0.980 ARI_mean=0.989 ARI_min=0.957 min_share=0.009 max_share=0.932 k_eff=1.421 t=3.285 n_clusters=5.900 noise=0.090 t_fit=2.153 t_assign=1.132 min_cluster_size=100.000
+HDBSCAN pca16 mcs=400              k_found=2.000 coherence=0.991 ARI_mean=0.990 ARI_min=0.972 min_share=0.067 max_share=0.933 k_eff=1.279 t=2.212 n_clusters=2.000 noise=0.066 t_fit=1.135 t_assign=1.077 min_cluster_size=400.000
+HDBSCAN pca16 mcs=20               k_found=256.000 coherence=0.326 ARI_mean=0.550 ARI_min=0.478 min_share=0.001 max_share=0.027 k_eff=199.984 t=1.757 n_clusters=256.000 noise=0.531 t_fit=1.126 t_assign=0.631 min_cluster_size=20.000
+HDBSCAN umap8 mcs=100              k_found=54.600 coherence=0.423 ARI_mean=0.393 ARI_min=0.364 min_share=0.006 max_share=0.052 k_eff=47.646 t=25.915 n_clusters=54.800 noise=0.453 t_fit=25.216 t_assign=0.699 min_cluster_size=100.000

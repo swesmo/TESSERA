@@ -1,0 +1,45 @@
+seed 42 d=8 done
+seed 42 d=16 done
+seed 42 d=32 done
+seed 42 d=128 done
+seed 1 d=8 done
+seed 1 d=16 done
+seed 1 d=32 done
+seed 1 d=128 done
+seed 2 d=8 done
+seed 2 d=16 done
+seed 2 d=32 done
+seed 2 d=128 done
+seed 3 d=8 done
+seed 3 d=16 done
+seed 3 d=32 done
+seed 3 d=128 done
+seed 4 d=8 done
+seed 4 d=16 done
+seed 4 d=32 done
+seed 4 d=128 done
+DBSCAN pca8 q=0.5            k_found=220.600 noise=0.452 max_share=0.153 k_eff=60.726 ARI_mean=0.700 ARI_min=0.667 coherence=0.542 eps=2.931 q=0.500 minPts=16.000 evr=0.844 t_pca=0.034 t_kdist=0.160 t_dbscan=0.056 t_assign=0.685 noise_sample=0.436 core_share=0.500 n_clusters_sample=220.600
+DBSCAN pca8 q=0.75           k_found=62.000 noise=0.169 max_share=0.695 k_eff=2.654 ARI_mean=0.830 ARI_min=0.815 coherence=0.746 eps=3.751 q=0.750 minPts=16.000 evr=0.844 t_pca=0.034 t_kdist=0.160 t_dbscan=0.065 t_assign=0.538 noise_sample=0.165 core_share=0.750 n_clusters_sample=62.000
+DBSCAN pca8 q=0.9            k_found=12.200 noise=0.050 max_share=0.879 k_eff=1.405 ARI_mean=0.924 ARI_min=0.909 coherence=0.927 eps=4.568 q=0.900 minPts=16.000 evr=0.844 t_pca=0.034 t_kdist=0.160 t_dbscan=0.089 t_assign=0.425 noise_sample=0.050 core_share=0.900 n_clusters_sample=12.200
+DBSCAN pca8 q=0.95           k_found=5.000 noise=0.024 max_share=0.934 k_eff=1.203 ARI_mean=0.592 ARI_min=0.329 coherence=0.966 eps=5.186 q=0.950 minPts=16.000 evr=0.844 t_pca=0.034 t_kdist=0.160 t_dbscan=0.100 t_assign=0.355 noise_sample=0.024 core_share=0.950 n_clusters_sample=5.000
+DBSCAN pca8 q=0.99           k_found=2.200 noise=0.004 max_share=0.995 k_eff=1.008 ARI_mean=0.845 ARI_min=0.763 coherence=0.995 eps=6.758 q=0.990 minPts=16.000 evr=0.844 t_pca=0.034 t_kdist=0.160 t_dbscan=0.165 t_assign=0.306 noise_sample=0.004 core_share=0.990 n_clusters_sample=2.200
+DBSCAN pca8 q=knee           k_found=9.400 noise=0.035 max_share=0.895 k_eff=1.379 ARI_mean=0.940 ARI_min=0.924 coherence=0.946 eps=4.804 q=0.927 minPts=16.000 evr=0.844 t_pca=0.034 t_kdist=0.160 t_dbscan=0.095 t_assign=0.382 noise_sample=0.035 core_share=0.927 n_clusters_sample=9.400
+DBSCAN pca16 q=0.5           k_found=30.200 noise=0.317 max_share=0.543 k_eff=2.783 ARI_mean=0.790 ARI_min=0.741 coherence=0.705 eps=5.598 q=0.500 minPts=32.000 evr=0.949 t_pca=0.019 t_kdist=0.147 t_dbscan=0.092 t_assign=0.570 noise_sample=0.313 core_share=0.500 n_clusters_sample=30.200
+DBSCAN pca16 q=0.75          k_found=4.400 noise=0.099 max_share=0.835 k_eff=1.336 ARI_mean=0.911 ARI_min=0.890 coherence=0.885 eps=6.334 q=0.750 minPts=32.000 evr=0.949 t_pca=0.019 t_kdist=0.147 t_dbscan=0.082 t_assign=0.841 noise_sample=0.099 core_share=0.750 n_clusters_sample=4.400
+DBSCAN pca16 q=0.9           k_found=1.800 noise=0.035 max_share=0.963 k_eff=1.017 ARI_mean=0.892 ARI_min=0.834 coherence=0.962 eps=7.225 q=0.900 minPts=32.000 evr=0.949 t_pca=0.019 t_kdist=0.147 t_dbscan=0.092 t_assign=0.999 noise_sample=0.035 core_share=0.900 n_clusters_sample=1.800
+DBSCAN pca16 q=0.95          k_found=1.000 noise=0.019 max_share=0.981 k_eff=1.000 ARI_mean=0.926 ARI_min=0.893 coherence=0.982 eps=7.997 q=0.950 minPts=32.000 evr=0.949 t_pca=0.019 t_kdist=0.147 t_dbscan=0.112 t_assign=1.076 noise_sample=0.019 core_share=0.950 n_clusters_sample=1.000
+DBSCAN pca16 q=0.99          k_found=1.400 noise=0.004 max_share=0.996 k_eff=1.004 ARI_mean=0.916 ARI_min=0.880 coherence=0.997 eps=10.297 q=0.990 minPts=32.000 evr=0.949 t_pca=0.019 t_kdist=0.147 t_dbscan=0.209 t_assign=1.100 noise_sample=0.004 core_share=0.990 n_clusters_sample=1.400
+DBSCAN pca16 q=knee          k_found=1.000 noise=0.024 max_share=0.976 k_eff=1.000 ARI_mean=0.903 ARI_min=0.867 coherence=0.976 eps=7.631 q=0.933 minPts=32.000 evr=0.949 t_pca=0.019 t_kdist=0.147 t_dbscan=0.103 t_assign=1.034 noise_sample=0.025 core_share=0.933 n_clusters_sample=1.000
+DBSCAN pca32 q=0.5           k_found=6.000 noise=0.209 max_share=0.730 k_eff=1.400 ARI_mean=0.881 ARI_min=0.849 coherence=0.803 eps=6.825 q=0.500 minPts=64.000 evr=0.983 t_pca=0.022 t_kdist=0.121 t_dbscan=0.093 t_assign=0.693 noise_sample=0.208 core_share=0.500 n_clusters_sample=6.000
+DBSCAN pca32 q=0.75          k_found=3.000 noise=0.074 max_share=0.865 k_eff=1.314 ARI_mean=0.956 ARI_min=0.947 coherence=0.918 eps=7.615 q=0.750 minPts=64.000 evr=0.983 t_pca=0.022 t_kdist=0.121 t_dbscan=0.117 t_assign=0.956 noise_sample=0.075 core_share=0.750 n_clusters_sample=3.000
+DBSCAN pca32 q=0.9           k_found=2.000 noise=0.028 max_share=0.969 k_eff=1.021 ARI_mean=0.969 ARI_min=0.962 coherence=0.972 eps=8.680 q=0.900 minPts=64.000 evr=0.983 t_pca=0.022 t_kdist=0.121 t_dbscan=0.143 t_assign=1.153 noise_sample=0.029 core_share=0.900 n_clusters_sample=2.000
+DBSCAN pca32 q=0.95          k_found=1.000 noise=0.016 max_share=0.984 k_eff=1.000 ARI_mean=0.971 ARI_min=0.960 coherence=0.985 eps=9.524 q=0.950 minPts=64.000 evr=0.983 t_pca=0.022 t_kdist=0.121 t_dbscan=0.152 t_assign=1.253 noise_sample=0.017 core_share=0.950 n_clusters_sample=1.000
+DBSCAN pca32 q=0.99          k_found=1.000 noise=0.003 max_share=0.997 k_eff=1.000 ARI_mean=0.937 ARI_min=0.896 coherence=0.998 eps=12.557 q=0.990 minPts=64.000 evr=0.983 t_pca=0.022 t_kdist=0.121 t_dbscan=0.330 t_assign=1.316 noise_sample=0.004 core_share=0.990 n_clusters_sample=1.000
+DBSCAN pca32 q=knee          k_found=1.200 noise=0.019 max_share=0.981 k_eff=1.004 ARI_mean=0.886 ARI_min=0.771 coherence=0.983 eps=9.350 q=0.943 minPts=64.000 evr=0.983 t_pca=0.022 t_kdist=0.121 t_dbscan=0.162 t_assign=1.245 noise_sample=0.019 core_share=0.943 n_clusters_sample=1.200
+DBSCAN raw128 q=0.5          k_found=2.000 noise=0.108 max_share=0.844 k_eff=1.233 ARI_mean=0.941 ARI_min=0.922 coherence=0.901 eps=8.491 q=0.500 minPts=256.000 evr=1.000 t_pca=0.006 t_kdist=0.306 t_dbscan=0.190 t_assign=1.190 noise_sample=0.108 core_share=0.500 n_clusters_sample=2.000
+DBSCAN raw128 q=0.75         k_found=1.600 noise=0.041 max_share=0.929 k_eff=1.136 ARI_mean=0.691 ARI_min=0.499 coherence=0.964 eps=9.542 q=0.750 minPts=256.000 evr=1.000 t_pca=0.006 t_kdist=0.306 t_dbscan=0.232 t_assign=1.667 noise_sample=0.042 core_share=0.750 n_clusters_sample=1.600
+DBSCAN raw128 q=0.9          k_found=1.000 noise=0.015 max_share=0.985 k_eff=1.000 ARI_mean=0.946 ARI_min=0.925 coherence=0.987 eps=10.815 q=0.900 minPts=256.000 evr=1.000 t_pca=0.006 t_kdist=0.306 t_dbscan=0.261 t_assign=1.988 noise_sample=0.016 core_share=0.900 n_clusters_sample=1.000
+DBSCAN raw128 q=0.95         k_found=1.000 noise=0.007 max_share=0.993 k_eff=1.000 ARI_mean=0.948 ARI_min=0.915 coherence=0.995 eps=12.021 q=0.950 minPts=256.000 evr=1.000 t_pca=0.006 t_kdist=0.306 t_dbscan=0.341 t_assign=2.062 noise_sample=0.008 core_share=0.950 n_clusters_sample=1.000
+DBSCAN raw128 q=0.99         k_found=1.000 noise=0.002 max_share=0.998 k_eff=1.000 ARI_mean=0.946 ARI_min=0.913 coherence=0.999 eps=15.154 q=0.990 minPts=256.000 evr=1.000 t_pca=0.006 t_kdist=0.306 t_dbscan=0.662 t_assign=2.172 noise_sample=0.002 core_share=0.990 n_clusters_sample=1.000
+DBSCAN raw128 q=knee         k_found=1.000 noise=0.012 max_share=0.988 k_eff=1.000 ARI_mean=0.955 ARI_min=0.931 coherence=0.991 eps=11.254 q=0.927 minPts=256.000 evr=1.000 t_pca=0.006 t_kdist=0.306 t_dbscan=0.289 t_assign=2.014 noise_sample=0.012 core_share=0.927 n_clusters_sample=1.000
+written /Users/chris/Library/CloudStorage/OneDrive-Personal/Studium/SPS/TESSERA/experiments/dbscan/results/dbscan_gbg.json

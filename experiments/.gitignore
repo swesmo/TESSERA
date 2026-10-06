@@ -1,0 +1,2 @@
+# The repo-wide .gitignore drops *.png; the figures here are results, keep them.
+!*.png

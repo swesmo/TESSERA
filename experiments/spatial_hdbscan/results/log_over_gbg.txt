@@ -1,0 +1,12 @@
+kmeans (TEE)                       k_found=5.000 coherence=0.814 ARI_mean=0.633 ARI_min=0.323 max_share=0.310 min_share=0.071 inertia=117.364 t_fit=0.036 t_merge=0.000
+kmeans n_init=10                   k_found=5.000 coherence=0.826 ARI_mean=0.929 ARI_min=0.767 max_share=0.304 min_share=0.059 inertia=111.084 t_fit=0.124 t_merge=0.000
+over K0=32 + Ward                  k_found=5.000 coherence=0.823 ARI_mean=0.814 ARI_min=0.683 max_share=0.328 min_share=0.052 inertia=116.766 t_fit=0.120 t_merge=0.002
+over K0=64 + Ward                  k_found=5.000 coherence=0.819 ARI_mean=0.754 ARI_min=0.408 max_share=0.333 min_share=0.050 inertia=118.216 t_fit=0.332 t_merge=0.008
+over K0=128 + Ward                 k_found=5.000 coherence=0.825 ARI_mean=0.755 ARI_min=0.556 max_share=0.338 min_share=0.051 inertia=116.888 t_fit=0.990 t_merge=0.058
+over K0=64 + average link          k_found=5.000 coherence=0.904 ARI_mean=0.469 ARI_min=0.167 max_share=0.605 min_share=0.004 inertia=148.753 t_fit=0.329 t_merge=0.138
+over K0=64 + spatial Ward g=1      k_found=5.000 coherence=0.821 ARI_mean=0.761 ARI_min=0.450 max_share=0.323 min_share=0.061 inertia=116.752 t_fit=0.321 t_merge=0.021
+over K0=64 + spatial Ward g=4      k_found=5.000 coherence=0.832 ARI_mean=0.724 ARI_min=0.322 max_share=0.373 min_share=0.066 inertia=117.634 t_fit=0.325 t_merge=0.021
+over K0=64 + Ward, sample 10k      k_found=5.000 coherence=0.823 ARI_mean=0.764 ARI_min=0.589 max_share=0.334 min_share=0.052 inertia=116.626 t_fit=0.126 t_merge=0.008
+over K0=64 + Ward, n_init=3        k_found=5.000 coherence=0.821 ARI_mean=0.772 ARI_min=0.408 max_share=0.331 min_share=0.050 inertia=117.347 t_fit=0.877 t_merge=0.008
+Gauss 10m + kmeans n_init=10       k_found=5.000 coherence=0.898 ARI_mean=0.953 ARI_min=0.901 max_share=0.333 min_share=0.060 inertia=115.840 t_fit=0.137 t_merge=0.000 t_pre=0.361
+Gauss 10m + over K0=64 + Ward      k_found=5.000 coherence=0.883 ARI_mean=0.553 ARI_min=0.321 max_share=0.344 min_share=0.060 inertia=121.584 t_fit=0.406 t_merge=0.009 t_pre=0.361
