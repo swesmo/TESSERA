@@ -1,5 +1,5 @@
 // Browser-feasibility benchmark (Node, single thread = one Web Worker).
-// Runs TEE's own k-means worker code (extracted from public/js/segmentation.js) on the
+// Runs TEE's own k-means worker code (extracted from TEE/public/js/segmentation.js) on the
 // Gothenburg viewport, then times JS versions of the smoothing steps and the O(n^2) core of
 // HDBSCAN.   node bench_js.mjs [path/to/hdbscan-ts]
 import fs from 'fs';
@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SEG = path.join(HERE, '../../public/js/segmentation.js');
+const SEG = path.join(HERE, '../../TEE/public/js/segmentation.js');
 const H = 385, W = 720, DIM = 128, N = H * W;
 const PX = [13.0, 6.95]; // metres per pixel (row, col) in TEE's EPSG:4326 grid at 57.7 N
 
@@ -251,6 +251,56 @@ if (PART === 'pipeline') { // end-to-end: over-cluster 32 (10k sample) -> Ward -
     res.pipeline_k5.tee_kmeans_same_session_ms = medOf(base);
     res.pipeline_k5.reps = reps;
     console.log('pipeline k=5 (median of', reps, ')', res.pipeline_k5);
+}
+if (PART === 'table') { // end-to-end time per clustering run for every method family, Gothenburg viewport
+    const reps = 5, medOf = (xs) => xs.slice().sort((x, y) => x - y)[xs.length >> 1];
+    const runWorkerOnX = (X, S, k, seed) => { // TEE's worker on sample rows only
+        let out; const self = { postMessage: (m) => { out = m; } };
+        new Function('self', workerSrc)(self);
+        self.onmessage({ data: { vectors: X.slice().buffer, N: S, dim: DIM, k, maxIter: 20, sampleIdx: null, seed } });
+        return { lab: new Int32Array(out.assignments), cent: new Float32Array(out.centroids) };
+    };
+    const sampleRows = (S, seed) => { const idx = buildSample(N, S, mulberry32(seed >>> 0)), X = new Float32Array(S * DIM); idx.forEach((p, i) => X.set(emb.subarray(p * DIM, (p + 1) * DIM), i * DIM)); return [idx, X]; };
+    const assignAll = (C, k) => { const D = dists(C, k), lab = new Int32Array(N); for (let i = 0; i < N; i++) { let bc = 0, bv = Infinity; for (let c = 0; c < k; c++) if (D[i * k + c] < bv) { bv = D[i * k + c]; bc = c; } lab[i] = bc; } return [lab, D]; };
+    const restarts = (k, seed, R) => { // one sample, R k-means++ runs on it, keep lowest inertia, assign all once
+        const S = Math.min(Math.max(5000, 500 * k), N), [, X] = sampleRows(S, seed);
+        let best = null;
+        for (let r = 0; r < R; r++) {
+            const km = runWorkerOnX(X, S, k, seed * 100 + r); let inert = 0;
+            for (let s = 0; s < S; s++) { const c = km.lab[s]; for (let d = 0; d < DIM; d++) { const v = X[s * DIM + d] - km.cent[c * DIM + d]; inert += v * v; } }
+            if (!best || inert < best.inert) best = { inert, cent: km.cent };
+        }
+        return assignAll(best.cent, k);
+    };
+    const overRefine = (k, seed) => { // over-cluster 32 on 10k sample -> Ward -> Lloyd refine on TEE sample -> assign all
+        const K0 = 32, km = teeKmeansOnSample(K0, seed, 10000);
+        const counts = new Int32Array(K0); for (const l of km.lab) counts[l]++;
+        const lut = wardMerge(km.cent, K0, counts, k), groups = [...new Set(lut)], G = new Float32Array(k * DIM);
+        groups.forEach((g, gi) => { let n = 0; for (let c = 0; c < K0; c++) if (lut[c] === g) { n += counts[c]; for (let d = 0; d < DIM; d++) G[gi * DIM + d] += counts[c] * km.cent[c * DIM + d]; } for (let d = 0; d < DIM; d++) G[gi * DIM + d] /= Math.max(n, 1); });
+        const S = Math.min(Math.max(5000, 500 * k), N), [, X] = sampleRows(S, seed + 1000), a = new Int32Array(S);
+        for (let it = 0; it < 20; it++) {
+            for (let s = 0; s < S; s++) { let bc = 0, bv = Infinity; for (let c = 0; c < k; c++) { let v = 0; for (let d = 0; d < DIM; d++) { const x = X[s * DIM + d] - G[c * DIM + d]; v += x * x; } if (v < bv) { bv = v; bc = c; } } a[s] = bc; }
+            const sum = new Float64Array(k * DIM), n = new Int32Array(k);
+            for (let s = 0; s < S; s++) { n[a[s]]++; for (let d = 0; d < DIM; d++) sum[a[s] * DIM + d] += X[s * DIM + d]; }
+            for (let c = 0; c < k; c++) if (n[c]) for (let d = 0; d < DIM; d++) G[c * DIM + d] = sum[c * DIM + d] / n[c];
+        }
+        return assignAll(G, k);
+    };
+    const wardOnly = (k, seed) => { const K0 = 32, km = teeKmeans(K0, seed); const counts = new Int32Array(K0); for (const l of km.lab) counts[l]++; const lut = wardMerge(km.cent, K0, counts, k); const lab = new Int32Array(N); for (let i = 0; i < N; i++) lab[i] = lut[km.lab[i]]; return lab; };
+    res.table_ms = {};
+    for (const k of [5, 17]) {
+        const T = {};
+        const time = (name, f) => { const ts = []; for (let r = 0; r < reps; r++) { const t0 = performance.now(); f(42 + r); ts.push(performance.now() - t0); } T[name] = medOf(ts); console.log(`k=${k} ${name}: ${T[name].toFixed(0)} ms`); };
+        time('TEE baseline', (s) => teeKmeans(k, s));
+        time('10 restarts', (s) => restarts(k, s, 10));
+        time('10 restarts + majority 20m', (s) => { const [lab] = restarts(k, s, 10); postMode(lab, k, win(20)); });
+        time('10 restarts + MRF 0.25', (s) => { const [lab, D] = restarts(k, s, 10); icm(D, lab, k, 0.25, win(10)); });
+        time('over32 + Ward (no refine)', (s) => wardOnly(k, s));
+        time('over32 + Ward + refine', (s) => overRefine(k, s));
+        time('over32 + Ward + refine + MRF 0.25', (s) => { const [lab, D] = overRefine(k, s); icm(D, lab, k, 0.25, win(10)); });
+        res.table_ms[`k=${k}`] = T;
+    }
+    const [tg] = med(() => gaussPre(10), 1); res.table_ms.gauss_pre_10m_once_ms = tg; console.log('Gauss pre-filter 10 m (once per viewport)', tg.toFixed(0));
 }
 if (PART === 'all' || PART === 'overcluster') {
     res.overcluster_ms = {};

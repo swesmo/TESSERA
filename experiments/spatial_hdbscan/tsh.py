@@ -22,8 +22,8 @@ HOME = Path.home()
 TILES = HOME / "tee_data/compute-cache/tessera-eval/tiles"
 CACHE = HOME / "tee_data/harness-cache"
 CACHE.mkdir(exist_ok=True)
-ROOT = Path(__file__).resolve().parents[2]  # repo root
-AUSTRIA_ZIP = ROOT / "austria.zip"
+SPS = Path(__file__).resolve().parents[2]
+AUSTRIA_ZIP = SPS / "austria.zip"
 
 
 # ───────────────────────── data ─────────────────────────
@@ -31,7 +31,7 @@ AUSTRIA_ZIP = ROOT / "austria.zip"
 def gothenburg():
     f = CACHE / "gbg2024_emb.npy"
     if not f.exists():
-        sys.path.insert(0, str(ROOT / "experiments/seed_instability"))
+        sys.path.insert(0, str(SPS / "Presentations/figures"))
         from make_seed_maps import load_embeddings  # faithful RVQ decode as in TEE
         emb, H, W = load_embeddings()
         np.save(f, emb.reshape(H, W, -1))
@@ -342,3 +342,228 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
     for g, (_, members) in enumerate(sorted(groups.items())):
         lut[members] = g
     return lut
+
+
+# ───────────────────────── additions 11 Oct 2026: final benchmark ─────────────────────────
+
+def ari(a, b):
+    """Adjusted Rand index from the contingency table. Same value as sklearn's
+    adjusted_rand_score (checked in tests/test_tsh.py), but ~50x faster on 0.3-1 M pixels."""
+    a = np.asarray(a).ravel().astype(np.int64)
+    b = np.asarray(b).ravel().astype(np.int64)
+    kb = int(b.max()) + 1
+    c = np.bincount(a * kb + b, minlength=(int(a.max()) + 1) * kb).reshape(-1, kb).astype(np.float64)
+
+    def pairs(x):
+        return (x * (x - 1) / 2).sum()
+
+    s_ab, s_a, s_b = pairs(c), pairs(c.sum(1)), pairs(c.sum(0))
+    n = c.sum()
+    exp, mx = s_a * s_b / (n * (n - 1) / 2), (s_a + s_b) / 2
+    return 1.0 if mx == exp else float((s_ab - exp) / (mx - exp))
+
+
+def pair_matrix(labs):
+    """(n, n) matrix of pairwise ARI between runs, NaN on the diagonal."""
+    n = len(labs)
+    P = np.full((n, n), np.nan)
+    for i in range(n):
+        for j in range(i + 1, n):
+            P[i, j] = P[j, i] = ari(labs[i], labs[j])
+    return P
+
+
+def group_means(X, a, k, C_old=None):
+    """Mean of X per label (k, D). Empty groups keep their old centroid."""
+    from scipy import sparse
+    M = sparse.csr_matrix((np.ones(len(a), np.float32), (a, np.arange(len(a)))), shape=(k, len(a)))
+    n = np.asarray(M.sum(1)).ravel()
+    S = np.asarray(M @ X, dtype=np.float64)
+    out = (S / np.maximum(n, 1)[:, None]).astype(np.float32)
+    if C_old is not None:
+        out[n == 0] = C_old[n == 0]
+    return out
+
+
+def lloyd_full(X, C, iters=1):
+    """`iters` Lloyd iterations over ALL pixels, starting from centroids C (after the sample fit)."""
+    C = C.astype(np.float32).copy()
+    for _ in range(iters):
+        C = group_means(X, sqd(X, C).argmin(1), len(C), C)
+    return C
+
+
+def pca_basis(Xs, d):
+    """PCA fitted on a sample: mean (D,), projection (D, d), share of variance kept."""
+    mu = Xs.mean(0, dtype=np.float64)
+    w, v = np.linalg.eigh(np.cov((Xs.astype(np.float64) - mu).T))
+    w, v = w[::-1], v[:, ::-1]
+    return mu.astype(np.float32), v[:, :d].astype(np.float32), float(w[:d].sum() / w.sum())
+
+
+def superpixels(emb, valid, px_m, size_m, c_rel, iters=10):
+    """SLIC superpixels on the embedding image (Achanta et al. 2012; skimage). size_m = target edge
+    length of a superpixel in metres. c_rel = compactness in units of the median embedding distance
+    between horizontally adjacent pixels: a pixel one superpixel edge away from a centre costs as
+    much as an embedding distance of c_rel times that median. skimage rescales the image to [0, 1]
+    first, so the compactness is divided by the value range. Returns the label grid (H, W) with
+    0..n-1 (-1 = invalid)."""
+    from skimage.segmentation import slic
+    H, W, _ = emb.shape
+    d_ref = np.sqrt(np.median(((emb[:, 1:] - emb[:, :-1]) ** 2).sum(-1)[valid[:, 1:] & valid[:, :-1]]))
+    span = float(emb[valid].max() - emb[valid].min())
+    n_seg = max(1, round(H * px_m[0] * W * px_m[1] / size_m ** 2))
+    sp = slic(emb.astype(np.float64), n_segments=n_seg, compactness=c_rel * d_ref / span, max_num_iter=iters,
+              spacing=(px_m[0] / min(px_m), px_m[1] / min(px_m)), convert2lab=False,
+              enforce_connectivity=True, start_label=0, channel_axis=-1,
+              mask=None if valid.all() else valid)
+    out = np.full((H, W), -1, np.int64)
+    out[valid] = np.unique(sp[valid], return_inverse=True)[1]
+    return out
+
+
+def load_geojson_labels(path, shape, gt, name_keys=("name", "label_name", "class", "label")):
+    """Rasterise a TEE label export (GeoJSON, EPSG:4326; docs/label-format.md and the manual-label
+    export of labels.js) onto a viewport grid.
+    shape = (H, W); gt = TEE geotransform dict {a, c, e, f}: lon = c + px a, lat = f + py e.
+    Returns cls (H, W) int16 with 0 = unlabelled and 1..n = class, fid (H, W) int32 with one id per
+    connected patch of one class (0 = none; the Gothenburg counterpart of a field, whatever
+    polygons the export was cut into), and the class names. Later features overwrite earlier
+    ones; a pixel belongs to a polygon when its centre lies inside."""
+    from affine import Affine
+    from rasterio.features import rasterize
+    from shapely.geometry import shape as to_shape
+    feats = json.loads(Path(path).read_text())["features"]
+    T = Affine(gt["a"], 0.0, gt["c"], 0.0, gt["e"], gt["f"])
+    names, shapes = [], []
+    for f in feats:
+        p = f.get("properties") or {}
+        name = next((str(p[k]) for k in name_keys if p.get(k) not in (None, "")), None)
+        if name is None or f.get("geometry") is None:
+            continue
+        if name not in names:
+            names.append(name)
+        shapes.append((to_shape(f["geometry"]), names.index(name) + 1))
+    if not shapes:
+        raise ValueError(f"no labelled features with one of the properties {name_keys} in {path}")
+    cls = rasterize(shapes, out_shape=shape, transform=T, fill=0, dtype="int16")
+    fid = np.zeros(shape, np.int32)
+    for c in range(1, len(names) + 1):
+        comp, n = ndimage.label(cls == c)
+        fid[comp > 0] = comp[comp > 0] + fid.max()
+    return cls, fid, names
+
+
+def _merge_refine(X, k, seed, C, n, c_ref=500, legacy=False):
+    """Ward-merge the centroids C (weights n) to k groups and refine the k weighted group means with
+    Lloyd on a sample of max(5000, c_ref k) pixels. Returns the k centroids."""
+    N = len(X)
+    n = np.maximum(n, 1)
+    lut = merge_tree(C, n, k, "ward")
+    G = np.stack([(C[lut == g] * n[lut == g, None]).sum(0) / n[lut == g].sum() for g in range(k)]).astype(np.float32)
+    Xs = X[np.random.default_rng(seed + 1000).choice(N, min(max(5000, c_ref * k), N), replace=False)]
+    a = np.full(len(Xs), -1)
+    for _ in range(20):
+        new = sqd(Xs, G).argmin(1)
+        changed, a = int((new != a).sum()), new
+        G = group_means(Xs, a, k, G)
+        if not legacy and changed < 0.005 * len(Xs):
+            break
+    return G
+
+
+def over_ward_refine(X, k, seed, K0=32, c_over=300, c_ref=500, S_over=None, legacy=False, over_iter=20):
+    """Over-cluster with TEE's k-means (K0 clusters, sample max(5000, c_over K0)), merge the K0
+    centroids to k groups with Ward's criterion, refine the k merged centroids with Lloyd on a
+    sample of max(5000, c_ref k) pixels (at most 20 iterations, stop below 0.5 % changes, as in
+    TEE). The Ward weights are the sample counts of the over-clustering. Returns the k centroids.
+    legacy=True: weights from an assignment of all pixels and 20 fixed iterations (the variant
+    measured on 30 Sep - 6 Oct). over_iter: maximum number of Lloyd iterations of the over-clustering."""
+    N = len(X)
+    S = min(S_over or max(5000, c_over * K0), N)
+    C = tee_kmeans(X, K0, seed, sample=S, max_iter=over_iter)
+    if legacy:
+        n = np.bincount(sqd(X, C).argmin(1), minlength=K0)
+    else:  # the sample tee_kmeans drew (its first RNG call)
+        idx = np.random.default_rng(seed).choice(N, S, replace=False)
+        n = np.bincount(sqd(X[idx], C).argmin(1), minlength=K0)
+    return _merge_refine(X, k, seed, C, n, c_ref, legacy)
+
+
+def over_ward_refine_proj(X, k, seed, K0=32, d=16, proj="pca", c_over=300, c_ref=500):
+    """Cheaper over-clustering: the K0-cluster k-means runs in a d-dimensional projection of the
+    sample (proj='pca': PCA fitted on that sample; 'rp': seeded Gaussian random projection), which
+    cuts its cost by about 128 / d. The centroids that are merged are the full-dimensional means of
+    the sample groups, and the refinement and the assignment use all dimensions as before."""
+    N = len(X)
+    S = min(max(5000, c_over * K0), N)
+    rng = np.random.default_rng(seed)
+    Xs = X[rng.choice(N, S, replace=False)]
+    if proj == "pca":
+        mu, P, _ = pca_basis(Xs, d)
+    else:
+        mu, P = Xs.mean(0), (rng.standard_normal((X.shape[1], d)) / np.sqrt(d)).astype(np.float32)
+    Zs = ((Xs - mu) @ P).astype(np.float32)
+    a = sqd(Zs, tee_kmeans(Zs, K0, seed + 2000, sample=S)).argmin(1)   # S = all sample points
+    n = np.bincount(a, minlength=K0)
+    C = group_means(Xs, a, K0)
+    return _merge_refine(X, k, seed, C[n > 0], n[n > 0], c_ref)
+
+
+# ───────────────────────── exact port of TEE's worker (for validation) ─────────────────────────
+
+def mulberry32(seed):
+    """TEE's seeded PRNG (public/js/segmentation.js), bit-exact."""
+    M = 0xFFFFFFFF
+    a = seed & M
+
+    def rand():
+        nonlocal a
+        a = (a + 0x6D2B79F5) & M
+        t = ((a ^ (a >> 15)) * (1 | a)) & M
+        t = ((t + (((t ^ (t >> 7)) * (61 | t)) & M)) & M) ^ t
+        return ((t ^ (t >> 14)) & M) / 4294967296
+
+    return rand
+
+
+def tee_kmeans_exact(X, k, seed, sample=None, max_iter=20):
+    """Line-by-line port of TEE's k-means worker with its own PRNG: the same seed gives the same
+    sample, the same k-means++ picks and (up to floating-point summation order) the same clusters as
+    the browser. Slow (Python loops); only used to validate tee_kmeans, which uses NumPy's
+    generator. Returns (labels of all N, centroids)."""
+    N, dim = X.shape
+    S = min(sample or max(5000, k * 500), N)
+    if S < N:  # buildSample: partial Fisher-Yates
+        rs, pool = mulberry32(seed), np.arange(N)
+        for i in range(S):
+            j = i + int(rs() * (N - i))
+            pool[i], pool[j] = pool[j], pool[i]
+        Xs = X[pool[:S]].astype(np.float64)
+    else:
+        Xs = X.astype(np.float64)
+    rand = mulberry32((seed & 0xFFFFFFFF) ^ 0x9E3779B9)
+    C = np.zeros((k, dim), np.float32)
+    C[0] = Xs[int(rand() * S)]
+    mind = np.full(S, np.inf)
+    for c in range(1, k):
+        mind = np.minimum(mind, ((Xs - C[c - 1].astype(np.float64)) ** 2).sum(1))
+        r, chosen = rand() * float(np.cumsum(mind)[-1]), 0
+        for si in range(S):
+            r -= mind[si]
+            if r <= 0:
+                chosen = si
+                break
+        C[c] = Xs[chosen]
+    a = np.zeros(S, np.int64)
+    for _ in range(max_iter):
+        new = np.stack([((Xs - C[c].astype(np.float64)) ** 2).sum(1) for c in range(k)], 1).argmin(1)
+        changed, a = int((new != a).sum()), new
+        for c in range(k):
+            m = a == c
+            C[c] = Xs[int(rand() * S)] if not m.any() else (Xs[m].sum(0) / m.sum())
+        if changed < S * 0.005:
+            break
+    lab = np.concatenate([np.stack([((X[s:s + 50_000].astype(np.float64) - C[c].astype(np.float64)) ** 2).sum(1)
+                                    for c in range(k)], 1).argmin(1) for s in range(0, N, 50_000)])
+    return lab, C

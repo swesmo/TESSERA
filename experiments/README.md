@@ -12,6 +12,11 @@ All numbers below are measured with these scripts; full write-up in
 
 Each folder keeps its outputs in `results/` (JSON metrics, logs, `.npz` label maps, figures).
 
+The methods that came out of these experiments are also in TEE itself: the auto-label panel has
+a "method" selector (`public/js/segmentation.js`, `SEG_METHODS`): k-means (unchanged default),
+Stable (over-cluster 32 + Ward merge + refine), Stable + smooth (+ MRF, beta 0.25) and
+Stable + Gaussian (10 m pre-filter). Tests: `node validation/test_segmentation_methods.mjs`.
+
 ## Setup
 
 Run with TEE's local venv (numpy, scipy, scikit-learn, geopandas, rasterio, Pillow):
@@ -44,13 +49,64 @@ cd dbscan           && python run_dbscan.py [gbg|aut22] [n_seeds]
                        python export_js_params.py && node bench_dbscan.mjs
 ```
 
+## Final method table (11 Oct 2026)
+
+`spatial_hdbscan/run_final.py` re-runs every method with 20 seeds and stores every metric per
+seed (`results/final_<tag>.json`): TEE baseline, restarts, the smoothing sweeps (Gaussian sigma,
+MRF beta, majority radius), over-clustering (K0 x sample size, iterations, fit in a PCA
+projection), full-N Lloyd, PCA / z-score, superpixels. Tags: `aut2022`, `gbg`, `aut2022_west` /
+`_east` (the two halves of the tile, clustered separately: hold-out check of the filter sizes),
+`*_100seeds` (the four main methods with 100 seeds).
+
+```
+cd spatial_hdbscan
+YEAR=2022 python run_final.py aut 20            # all families, ~15 min
+python run_final.py gbg 20
+YEAR=2022 python run_final.py aut 20 west       # and: east
+TAG=_100seeds python run_final.py gbg 100 all key
+python analyze_final.py                         # mean +- sd, paired differences, bootstrap -> results/final_summary.md
+python -c "import numpy as np, pathlib; d = pathlib.Path.home()/'tee_data/harness-cache'; np.load(d/'austria_grid_16.75_48.35_2022.npz')['emb'].astype('<f4').tofile(d/'aut2022.f32')"
+node bench_port.mjs gbg 15; node --max-old-space-size=8192 bench_port.mjs aut 9   # runtime of the ported worker
+node port_maps.mjs                              # label maps from TEE's worker for the map figure
+python make_final_figs.py                       # results/fig/final_*.pdf
+python make_report_tables.py                    # LaTeX rows of the report tables
+python -m unittest discover -s tests -v         # 25 tests, see below
+```
+
+Write the logs outside OneDrive (e.g. `> ~/tee_data/harness-cache/logs/x.txt`): a process that
+keeps a log file open inside the synced folder dies silently when OneDrive touches the file.
+
+Gothenburg labels: when the hand-made labels are exported from TEE as GeoJSON, run
+`GBG_LABELS=/path/to/export.geojson K=<number of classes> python run_final.py gbg 20`;
+`tsh.load_geojson_labels` rasterises them onto the viewport grid (checked pixel-exactly with a
+file in TEE's export format), and AMI / ARI are then computed on the labelled pixels.
+
+Tests (`spatial_hdbscan/tests/test_tsh.py`): small inputs whose result can be worked out by
+hand (three groups of five points, Ward merges of three and four centroids, one isolated pixel
+for the MRF and the majority filter, an impulse for the Gaussian filter, a two-field grid for
+the field metrics), and comparisons with TEE's own worker code run in Node: the line-by-line
+Python port (`tsh.tee_kmeans_exact`, TEE's mulberry32) returns the same cluster for every pixel,
+the harness (`tsh.tee_kmeans`, NumPy generator) has the same stability within sampling noise,
+and the JavaScript port of Ward merge / MRF / Gaussian filter / "Stable" matches the Python code.
+
 ## Main findings
 
-- TEE k-means is seed-sensitive: Gothenburg k=5, seeds 1-20, mean pairwise disagreement 12 %,
-  worst 37 %, mean ARI 0.79 (min 0.49).
-- Stability comes from restarts (ARI 0.63 -> 0.93), not smoothing. Over-cluster 32 (10k
-  sample) -> Ward -> refine is the most stable (ARI Gothenburg 0.96, Austria 2024 0.83).
-- Smoothing roughly halves speckle at 10-500 ms in JS. On Austria 2022 the best combination
-  is a Gauss 10 m pre-filter + over-cluster/Ward/refine (AMI 0.409, ARI 0.59 -> 0.76).
-- HDBSCAN gives one 93 % cluster or mostly noise; DBSCAN is degenerate on both datasets
-  (noise = mixed/edge pixels). Both dropped.
+Numbers from the final runs of 11 Oct 2026 (20 seeds, 100 for the stability of the main methods;
+runtime = TEE's worker code in Node, median per run). Details: `spatial_hdbscan/results/final_summary.md`.
+
+- TEE k-means is seed-sensitive. TEE's own worker on Gothenburg, k = 5, seeds 1-100: two seeds put
+  21.6 % of the pixels into different clusters on average (max 57 %), mean ARI 0.67. (Seeds 1-20
+  alone give 12 % / 37 % / 0.79, the numbers of the midterm slides.)
+- Over-cluster 32 (sample 300 K0) -> Ward merge -> refine is the most stable method: mean ARI
+  between seeds 0.62 -> 0.96 (Gothenburg) and 0.60 -> 0.73 (Austria 2022); 1.8 % of the pixels
+  differ between two seeds with the ported code. 10 restarts: 0.94 / 0.67. K0 (24-128) and the
+  sample size (150 / 300 / 500 K0) make no difference within +-0.03.
+- Smoothing roughly halves speckle (22.6 % -> 13-14 %) and raises the AMI with the crop classes
+  from 0.380 to 0.401 (MRF, beta 0.25) or 0.410 (Gaussian 10 m); the ARI is unchanged (MRF) or
+  slightly lower (Gaussian). sigma = 10 m is best on the tile and on both halves separately.
+- Proposed for TEE: over-cluster 32 + Ward + refine + MRF 0.25. Runtime on the Gothenburg viewport:
+  0.74 s (k = 5) and 1.10 s (k = 17), against 0.21 s and 0.71 s for the current k-means.
+- No gain: Lloyd iterations on all pixels, k-means on PCA or z-scored embeddings, SLIC
+  superpixels, HDBSCAN as the merge step (its number of groups follows K0, not the data).
+- HDBSCAN on pixels gives one 93 % cluster or mostly noise; DBSCAN is degenerate on both datasets
+  (noise = mixed / edge pixels). Both dropped.

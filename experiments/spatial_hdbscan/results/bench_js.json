@@ -77,5 +77,26 @@
   "total_ms": 869.99321,
   "tee_kmeans_same_session_ms": 225.30499999999995,
   "reps": 5
+ },
+ "table_ms": {
+  "k=5": {
+   "TEE baseline": 218.29833400000007,
+   "10 restarts": 569.572791,
+   "10 restarts + majority 20m": 518.332958,
+   "10 restarts + MRF 0.25": 565.176375,
+   "over32 + Ward (no refine)": 1580.4165409999987,
+   "over32 + Ward + refine": 562.2703750000001,
+   "over32 + Ward + refine + MRF 0.25": 594.3626670000012
+  },
+  "k=17": {
+   "TEE baseline": 659.1243749999994,
+   "10 restarts": 2392.756458,
+   "10 restarts + majority 20m": 2442.7750830000004,
+   "10 restarts + MRF 0.25": 2536.742707999998,
+   "over32 + Ward (no refine)": 1608.7025409999915,
+   "over32 + Ward + refine": 1007.9277920000022,
+   "over32 + Ward + refine + MRF 0.25": 1157.0517910000053
+  },
+  "gauss_pre_10m_once_ms": 504.70570900000166
  }
 }
