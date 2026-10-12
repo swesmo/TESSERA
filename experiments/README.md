@@ -88,9 +88,21 @@ rasterises the labels onto the viewport grid (checked pixel-exactly with a file 
 format). Everyone should create the viewport from `gothenburg_viewport.geojson`, so that all
 exports and the cached embeddings share one pixel grid.
 
-`results/final_gbg_labels.*` and `results/spectral_gbg_labels.json` are PRELIMINARY: scored on
-the partial labels of 12 Oct (5 classes, 29 % of the viewport, viewport shifted by ~450 m
-against the one the embeddings were cached for). Re-run when the labelling is complete.
+Only hand-drawn polygons are ground truth. TEE's exports mix three kinds of features (column
+`type`): `polygon` (drawn by hand), `similarity` (pixels TEE matched to a seed pixel by embedding
+distance) and, with "classified pixels" ticked, `classified` (TEE's nearest-centroid
+classification of every pixel). The last two are derived from the embeddings that the clustering
+is scored on, so scoring against them is circular. Keep `type == "polygon"` before merging:
+`python -c "import geopandas as g; d = g.read_file('export.geojson'); d[d.type == 'polygon'][['name', 'geometry']].to_file('hand.geojson', driver='GeoJSON')"`.
+
+Results on the partial labels of 12 Oct (PRELIMINARY: 5 classes, viewport shifted by ~450 m
+against the one the embeddings were cached for; re-run when the labelling is complete):
+- `results/final_gbg_labels_hand.*`: hand-drawn polygons only, 62,142 pixels = 22 % of the
+  viewport. k = 5, 20 seeds: baseline AMI 0.467 +- 0.033 / ARI 0.468 / stability 0.63;
+  over-cluster 32 + MRF 0.497 +- 0.001 / 0.490 / 0.95. Use these.
+- `results/final_gbg_labels.*`, `results/spectral_gbg_labels.json`: scored on all 81,295 labelled
+  pixels, i.e. INCLUDING 28,855 similarity-matched FOREST pixels. The scores are inflated
+  (baseline AMI 0.521); kept only for comparison.
 
 Tests (`spatial_hdbscan/tests/test_tsh.py`): small inputs whose result can be worked out by
 hand (three groups of five points, Ward merges of three and four centroids, one isolated pixel
