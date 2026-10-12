@@ -78,10 +78,19 @@ python -m unittest discover -s tests -v         # 25 tests, see below
 Write the logs outside OneDrive (e.g. `> ~/tee_data/harness-cache/logs/x.txt`): a process that
 keeps a log file open inside the synced folder dies silently when OneDrive touches the file.
 
-Gothenburg labels: when the hand-made labels are exported from TEE as GeoJSON, run
-`GBG_LABELS=/path/to/export.geojson K=<number of classes> python run_final.py gbg 20`;
-`tsh.load_geojson_labels` rasterises them onto the viewport grid (checked pixel-exactly with a
-file in TEE's export format), and AMI / ARI are then computed on the labelled pixels.
+Gothenburg labels: `python merge_labels.py labels.geojson EXPORT [EXPORT ...]` combines the label
+exports of several people (TEE's shapefile ZIP, e.g. `gothenburg.zip` on main, or GeoJSON) into
+one file. It reports the pixels per class, pixels that two exports label differently, and how
+much of each assigned region (a feature named after team members) is labelled. Then
+`GBG_LABELS=labels.geojson K=<number of classes> TAG=_labels python run_final.py gbg 20`
+(also `run_spectral.py gbg`) computes AMI / ARI on the labelled pixels; `tsh.load_geojson_labels`
+rasterises the labels onto the viewport grid (checked pixel-exactly with a file in TEE's export
+format). Everyone should create the viewport from `gothenburg_viewport.geojson`, so that all
+exports and the cached embeddings share one pixel grid.
+
+`results/final_gbg_labels.*` and `results/spectral_gbg_labels.json` are PRELIMINARY: scored on
+the partial labels of 12 Oct (5 classes, 29 % of the viewport, viewport shifted by ~450 m
+against the one the embeddings were cached for). Re-run when the labelling is complete.
 
 Tests (`spatial_hdbscan/tests/test_tsh.py`): small inputs whose result can be worked out by
 hand (three groups of five points, Ward merges of three and four centroids, one isolated pixel

@@ -3,7 +3,8 @@ Follows up on the 'spectral' family of run_final.py, where spectral clustering o
 pixels with nearest-mean assignment raised AMI and ARI on the Austrian tile but collapsed on
 Gothenburg with k = 5.
 
-    [YEAR=2022] ~/tee-local/venv/bin/python -W ignore run_spectral.py [gbg|aut] [n_seeds=10] [all|west|east]
+    [YEAR=2022] [GBG_LABELS=labels.geojson TAG=_labels] \
+        ~/tee-local/venv/bin/python -W ignore run_spectral.py [gbg|aut] [n_seeds=10] [all|west|east]
 
 Varies the number of graph neighbours, the sample size and k, adds MRF smoothing, and reports for
 every setting AMI / ARI (if labels), stability, the largest cluster and the number of connected
@@ -24,6 +25,9 @@ which = sys.argv[1] if len(sys.argv) > 1 else "gbg"
 n_seeds = int(sys.argv[2]) if len(sys.argv) > 2 else 10
 PART = sys.argv[3] if len(sys.argv) > 3 else "all"
 ds = tsh.gothenburg() if which == "gbg" else tsh.austria(year=int(os.environ.get("YEAR", 2022)))
+if which == "gbg" and os.environ.get("GBG_LABELS"):  # hand-made labels exported from TEE (GeoJSON)
+    gt = json.loads((Path.home() / "tee_data/vectors/Gteborg/2024/metadata.json").read_text())["geotransform"]
+    ds["cls"], ds["fid"], _ = tsh.load_geojson_labels(os.environ["GBG_LABELS"], ds["valid"].shape, gt)
 if PART in ("west", "east"):
     half = ds["emb"].shape[1] // 2
     sl = slice(0, half) if PART == "west" else slice(half, None)
@@ -35,7 +39,7 @@ H, W, _ = E.shape
 X = E[V]
 LAB = "fid" in ds
 seeds = [42] + list(range(1, n_seeds))
-tag = which + ("" if PART == "all" else f"_{PART}")
+tag = which + ("" if PART == "all" else f"_{PART}") + os.environ.get("TAG", "")
 
 
 def grid(l):
