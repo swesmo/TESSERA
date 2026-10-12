@@ -7,7 +7,7 @@ the configurations that were still open (full-N Lloyd, PCA, superpixels).
         ~/tee-local/venv/bin/python run_final.py [gbg|aut] [n_seeds] [all|west|east] [only]
 
 part  west / east = left / right half of the Austrian tile (hold-out check for the parameters).
-only  '|'-separated family names (base, gauss, over, gover, fast, iters, pca, sp, key); the result is
+only  '|'-separated family names (base, gauss, over, gover, fast, iters, pca, sp, key, spectral); the result is
       merged into the existing file. 'key' (the four main methods, for runs with many seeds) only
       runs on request; use it with TAG=_100seeds so that it gets its own file.
 Writes results/final_<tag>.json and results/maps_final_<tag>.npz (seed 42).
@@ -238,7 +238,39 @@ def fam_iters(s, out, t):
         out[f"over32 S={c}K0, 5 it"], t[f"over32 S={c}K0, 5 it"] = tsh.sqd(X, G).argmin(1), time.time() - t0
 
 
-FAMILIES = {"key": fam_key, "fast": fam_fast, "iters": fam_iters, "base": fam_base, "over": fam_over, "pca": fam_pca, "sp": fam_sp,
+def fam_spectral(s, out, t):
+    """Spectral clustering (12 Oct): as the merge step after over-clustering, and directly on a sample."""
+    t0 = time.time(); out["baseline"] = tsh.sqd(X, tsh.tee_kmeans(X, k, s)).argmin(1); t["baseline"] = time.time() - t0
+    t0 = time.time(); out["over32 S=300K0"] = tsh.sqd(X, over(X, s, 32, 300)).argmin(1); t["over32 S=300K0"] = time.time() - t0
+    for K0 in (32, 64, 128):
+        if K0 <= k:
+            continue
+        t0 = time.time()
+        out[f"over{K0} + spectral merge + refine"] = tsh.sqd(X, tsh.over_spectral_refine(X, k, s, K0)).argmin(1)
+        t[f"over{K0} + spectral merge + refine"] = time.time() - t0
+    # spectral clustering of a 5,000-pixel sample; all pixels then get (a) the nearest group mean,
+    # (b) the nearest group mean after Lloyd refinement, (c) the majority label of their 5 nearest
+    # sample pixels, which keeps non-convex clusters but costs 5,000 distances per pixel
+    t0 = time.time()
+    idx, lab_s = tsh.spectral_sample(X, k, s)
+    ks = int(lab_s.max()) + 1
+    M = tsh.group_means(X[idx], lab_s, ks)
+    t_spec = time.time() - t0
+    t0 = time.time(); out["spectral on 5k sample -> nearest mean"] = tsh.sqd(X, M).argmin(1)
+    t["spectral on 5k sample -> nearest mean"] = t_spec + time.time() - t0
+    t0 = time.time()
+    G = tsh._merge_refine(X, ks, s, M, np.bincount(lab_s, minlength=ks), lut=np.arange(ks))
+    out["spectral on 5k sample -> refine"] = tsh.sqd(X, G).argmin(1)
+    t["spectral on 5k sample -> refine"] = t_spec + time.time() - t0
+    if os.environ.get("SPECTRAL_KNN"):
+        from sklearn.neighbors import KNeighborsClassifier
+        t0 = time.time()
+        clf = KNeighborsClassifier(n_neighbors=5, algorithm="brute").fit(X[idx], lab_s)
+        out["spectral on 5k sample -> 5-NN vote"] = np.concatenate([clf.predict(X[a:a + 20_000]) for a in range(0, N, 20_000)])
+        t["spectral on 5k sample -> 5-NN vote"] = t_spec + time.time() - t0
+
+
+FAMILIES = {"key": fam_key, "spectral": fam_spectral, "fast": fam_fast, "iters": fam_iters, "base": fam_base, "over": fam_over, "pca": fam_pca, "sp": fam_sp,
             **{f"gauss{sig:g}": make_fam_gauss(sig) for sig in (5, 7.5, 10, 15, 20)}, "gover": fam_gover}
 
 
@@ -266,7 +298,7 @@ res["meta"] = dict(dataset=ds["name"], part=PART, N=int(N), k=k, seeds=seeds, sh
 for fname, fam in FAMILIES.items():
     if ONLY and not any(o == fname or (o == "gauss" and fname.startswith("gauss")) for o in ONLY):
         continue
-    if fname == "key" and not ONLY:  # only on request
+    if fname in ("key", "spectral") and not ONLY:  # only on request
         continue
     t_fam = time.time()
     labs, per_seed, times = {}, {}, {}

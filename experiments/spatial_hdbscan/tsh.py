@@ -454,12 +454,17 @@ def load_geojson_labels(path, shape, gt, name_keys=("name", "label_name", "class
     return cls, fid, names
 
 
-def _merge_refine(X, k, seed, C, n, c_ref=500, legacy=False):
-    """Ward-merge the centroids C (weights n) to k groups and refine the k weighted group means with
-    Lloyd on a sample of max(5000, c_ref k) pixels. Returns the k centroids."""
+def _merge_refine(X, k, seed, C, n, c_ref=500, legacy=False, lut=None):
+    """Merge the centroids C (weights n) to k groups (Ward's criterion, or the given assignment
+    lut of centroids to groups) and refine the weighted group means with Lloyd on a sample of
+    max(5000, c_ref k) pixels. Returns the centroids (k, or fewer if lut has fewer groups)."""
     N = len(X)
     n = np.maximum(n, 1)
-    lut = merge_tree(C, n, k, "ward")
+    if lut is None:
+        lut = merge_tree(C, n, k, "ward")
+    else:
+        lut = np.unique(lut, return_inverse=True)[1]
+        k = int(lut.max()) + 1
     G = np.stack([(C[lut == g] * n[lut == g, None]).sum(0) / n[lut == g].sum() for g in range(k)]).astype(np.float32)
     Xs = X[np.random.default_rng(seed + 1000).choice(N, min(max(5000, c_ref * k), N), replace=False)]
     a = np.full(len(Xs), -1)
@@ -508,6 +513,31 @@ def over_ward_refine_proj(X, k, seed, K0=32, d=16, proj="pca", c_over=300, c_ref
     n = np.bincount(a, minlength=K0)
     C = group_means(Xs, a, K0)
     return _merge_refine(X, k, seed, C[n > 0], n[n > 0], c_ref)
+
+
+def spectral_groups(F, k, seed, n_neighbors=10):
+    """Spectral clustering (normalised cut on a k-nearest-neighbour graph, von Luxburg 2007; sklearn)
+    of the rows of F into k groups. Returns a label per row."""
+    from sklearn.cluster import SpectralClustering
+    return SpectralClustering(n_clusters=k, affinity="nearest_neighbors", n_neighbors=min(n_neighbors, len(F) - 1),
+                              assign_labels="cluster_qr", random_state=seed).fit_predict(F)
+
+
+def over_spectral_refine(X, k, seed, K0=64, c_over=300, n_neighbors=8):
+    """Over-clustering as in over_ward_refine, but the K0 centroids are merged with spectral
+    clustering instead of Ward's criterion."""
+    N = len(X)
+    S = min(max(5000, c_over * K0), N)
+    C = tee_kmeans(X, K0, seed, sample=S)
+    idx = np.random.default_rng(seed).choice(N, S, replace=False)
+    n = np.bincount(sqd(X[idx], C).argmin(1), minlength=K0)
+    return _merge_refine(X, k, seed, C, n, lut=spectral_groups(C, k, seed, n_neighbors))
+
+
+def spectral_sample(X, k, seed, S=5000, n_neighbors=15):
+    """Spectral clustering of a random sample of S pixels. Returns the sample indices and labels."""
+    idx = np.random.default_rng(seed).choice(len(X), min(S, len(X)), replace=False)
+    return idx, spectral_groups(X[idx], k, seed, n_neighbors)
 
 
 # ───────────────────────── exact port of TEE's worker (for validation) ─────────────────────────

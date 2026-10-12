@@ -69,6 +69,7 @@ python -c "import numpy as np, pathlib; d = pathlib.Path.home()/'tee_data/harnes
 node bench_port.mjs gbg 15; node --max-old-space-size=8192 bench_port.mjs aut 9   # runtime of the ported worker
 node port_maps.mjs                              # label maps from TEE's worker for the map figure
 node bench_browser.mjs                          # the same methods timed in the TEE viewer in (headless) Chrome
+python -W ignore run_spectral.py aut 10         # spectral clustering of a sample: neighbours, sample size, k (also: gbg, west, east)
 python make_final_figs.py                       # results/fig/final_*.pdf
 python make_report_tables.py                    # LaTeX rows of the report tables
 python -m unittest discover -s tests -v         # 25 tests, see below
@@ -113,3 +114,9 @@ runtime = TEE's worker code in Node, median per run). Details: `spatial_hdbscan/
   superpixels, HDBSCAN as the merge step (its number of groups follows K0, not the data).
 - HDBSCAN on pixels gives one 93 % cluster or mostly noise; DBSCAN is degenerate on both datasets
   (noise = mixed / edge pixels). Both dropped.
+- Spectral clustering (12 Oct, Python only, 10 seeds): spectral clustering of a 5,000-pixel sample (15-NN
+  graph) with nearest-mean assignment raises AMI / ARI on the Austrian tile from 0.384 / 0.241 to 0.428 / 0.308
+  at k = 17 (0.443 / 0.319 with the MRF; confirmed on both halves and at k = 8, no gain at k = 5). On
+  Gothenburg the 15-NN graph is disconnected and one cluster keeps 82 % of the viewport at k = 5; with >= 60
+  neighbours it is balanced and stable, but that setting removes the gain on the Austrian tile. Open: a
+  neighbour rule that works on both, the Gothenburg labels, and the cost in the browser.
