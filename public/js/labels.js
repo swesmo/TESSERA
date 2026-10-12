@@ -1624,6 +1624,8 @@ async function doExportManualLabels(format) {
             viewport: window.currentViewportName,
             year: window.currentEmbeddingYear,
             embedding_version: window.localVectors?.metadata?.dataset_version || null,
+            // the grid that the labels' pixel_coords index into
+            geotransform: window.localVectors?.metadata?.geotransform || null,
             schema: window.activeSchemaMode,
             labels: manualLabels.map(l => ({
                 name: l.name,
@@ -1639,7 +1641,8 @@ async function doExportManualLabels(format) {
                 polygonMode: l.polygonMode || null,
                 threshold: l.threshold,
                 matchCount: l.matchCount,
-                pixelCount: l.pixelCount || null
+                pixelCount: l.pixelCount || null,
+                pixel_coords: l.pixel_coords || null
             }))
         };
         downloadFile(JSON.stringify(data, null, 2), `manual-labels-${window.currentViewportName || 'export'}.json`, 'application/json');
@@ -1836,7 +1839,7 @@ function importManualLabels(file) {
                     importGeoJSON(data);
                 } else if (data.labels && Array.isArray(data.labels)) {
                     // Full JSON import
-                    importLabelsJSON(data.labels);
+                    importLabelsJSON(data.labels, data.geotransform);
                 } else if (Array.isArray(data)) {
                     // Array of labels (anonymous or located)
                     importLabelsJSON(data);
@@ -2079,7 +2082,12 @@ function importGeoJSON(geojson) {
     console.log(`[IMPORT] Imported ${count} labels (${geojson.features.length} features) from GeoJSON`);
 }
 
-function importLabelsJSON(labels) {
+function importLabelsJSON(labels, geotransform) {
+    // pixel_coords (the exact pixels of a promoted auto-label cluster) index
+    // into the grid they were exported from: restore them only on that same
+    // grid. Anywhere else the label falls back to its embedding + threshold.
+    const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
+    const sameGrid = !!gt && !!geotransform && ['a', 'c', 'e', 'f'].every(k => gt[k] === geotransform[k]);
     let count = 0;
     for (const l of labels) {
         const entry = {
@@ -2096,6 +2104,7 @@ function importLabelsJSON(labels) {
             pixelCount: l.pixelCount || null
         };
         if (l.holes) entry.holes = l.holes;
+        if (sameGrid && l.pixel_coords) entry.pixel_coords = l.pixel_coords;
         pushManualLabel(entry);
         count++;
     }

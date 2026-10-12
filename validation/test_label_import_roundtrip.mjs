@@ -13,7 +13,9 @@
  *    with the wrong winding as a MultiPolygon, which is what promoted
  *    auto-label clusters with holes turned into;
  *  - every imported label saved the whole label store and re-rendered the
- *    list (addManualLabel), so import time grew quadratically.
+ *    list (addManualLabel), so import time grew quadratically;
+ *  - the JSON (full) export left out the pixels of promoted auto-label
+ *    clusters (pixel_coords), so they came back as a threshold search.
  *
  * The geometry is checked on a 12 x 10 pixel grid with shapes whose pixel
  * counts can be verified by hand: a 6 x 6 square (36 px) with a 2 x 2 hole
@@ -275,6 +277,24 @@ const OTHER = square(8, 2, 11, 5);       // 3 x 3 =  9 px, beside OUTER
     const empty = makeApp({ JSZip: { loadAsync: async () => ({ files: { 'readme.txt': entry('readme.txt') } }) }, shapefile });
     await empty.api.importShapefile(new ArrayBuffer(0));
     eq(empty.calls.alerts.length, 1, 'a zip without any .shp still reports an error');
+}
+
+// --- 8. JSON (full): pixels of a promoted cluster ------------------------
+{
+    // what doExportManualLabels('json') writes for a promoted cluster
+    const cluster = { name: 'water', type: 'similarity', lat: 5, lon: 5, embedding: [0, 0], threshold: 3, pixel_coords: [1, 1, 2, 1, 2, 2] };
+    const same = makeApp().api;
+    same.importLabelsJSON([{ ...cluster }], { ...gt });
+    eq(same.labels()[0].pixel_coords, [1, 1, 2, 1, 2, 2], 'pixel_coords are restored on the grid they were exported from');
+
+    const shifted = makeApp().api;
+    shifted.importLabelsJSON([{ ...cluster }], { ...gt, c: gt.c + 0.25 });
+    ok(!('pixel_coords' in shifted.labels()[0]), 'but not on another grid (they would land on other pixels)');
+    eq(shifted.labels()[0].threshold, 3, 'there the label keeps its embedding + threshold');
+
+    const old = makeApp().api;
+    old.importLabelsJSON([{ ...cluster }]);
+    ok(!('pixel_coords' in old.labels()[0]), 'nor from a file that does not say which grid it is from');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -264,3 +264,15 @@ class TestExportConsistency:
         assert "expandLabelToFeatures" not in json_block.group(1), (
             "JSON export should not vectorize — it exports raw label metadata"
         )
+
+    def test_json_export_keeps_cluster_pixels(self, js):
+        """JSON (full) export carries the pixels of promoted auto-label clusters
+        and the grid they index into; the import restores them only there."""
+        json_block = re.search(
+            r"if\s*\(format\s*===\s*'json'\)\s*\{(.*?)}\s*else\s*if",
+            js, re.DOTALL
+        ).group(1)
+        assert "pixel_coords: l.pixel_coords || null" in json_block
+        assert "geotransform:" in json_block
+        assert "importLabelsJSON(data.labels, data.geotransform)" in js
+        assert "if (sameGrid && l.pixel_coords) entry.pixel_coords = l.pixel_coords;" in function_source(js, "importLabelsJSON")
