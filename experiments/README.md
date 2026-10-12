@@ -68,6 +68,7 @@ python analyze_final.py                         # mean +- sd, paired differences
 python -c "import numpy as np, pathlib; d = pathlib.Path.home()/'tee_data/harness-cache'; np.load(d/'austria_grid_16.75_48.35_2022.npz')['emb'].astype('<f4').tofile(d/'aut2022.f32')"
 node bench_port.mjs gbg 15; node --max-old-space-size=8192 bench_port.mjs aut 9   # runtime of the ported worker
 node port_maps.mjs                              # label maps from TEE's worker for the map figure
+node bench_browser.mjs                          # the same methods timed in the TEE viewer in (headless) Chrome
 python make_final_figs.py                       # results/fig/final_*.pdf
 python make_report_tables.py                    # LaTeX rows of the report tables
 python -m unittest discover -s tests -v         # 25 tests, see below
@@ -106,6 +107,8 @@ runtime = TEE's worker code in Node, median per run). Details: `spatial_hdbscan/
   slightly lower (Gaussian). sigma = 10 m is best on the tile and on both halves separately.
 - Proposed for TEE: over-cluster 32 + Ward + refine + MRF 0.25. Runtime on the Gothenburg viewport:
   0.74 s (k = 5) and 1.10 s (k = 17), against 0.21 s and 0.71 s for the current k-means.
+  In the TEE viewer in Chrome 154 (run start until the cluster map is drawn): 0.77 s and 1.13 s against
+  0.27 s and 0.73 s; same cluster sizes as in Node.
 - No gain: Lloyd iterations on all pixels, k-means on PCA or z-scored embeddings, SLIC
   superpixels, HDBSCAN as the merge step (its number of groups follows K0, not the data).
 - HDBSCAN on pixels gives one 93 % cluster or mostly noise; DBSCAN is degenerate on both datasets
