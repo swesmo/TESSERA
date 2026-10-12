@@ -114,6 +114,12 @@ distance between the two selected years.
 
 K-means uses K-means++ initialisation; runs in an inline Web Worker;
 subsamples when N > max(5 000, k × 500).
+The *method* selector (`#seg-method-select`, `SEG_METHODS` in `segmentation.js`)
+adds three optional pipelines in the same worker: *Stable* (over-cluster into 32,
+Ward merge to k, Lloyd refinement), *Stable + smooth* (then MRF/Potts smoothing of
+the labels with ICM, β = 0.25) and *Stable + Gaussian* (Gaussian filter of the
+embeddings, σ = 10 m, before *Stable*). *k-means* stays the default and gives
+bit-identical results.
 
 ### Polygon search modes
 

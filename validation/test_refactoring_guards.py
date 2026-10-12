@@ -1573,7 +1573,7 @@ class TestSegmentationSeed:
 
     def test_runkmeans_threads_seed(self):
         src = (JS_DIR / "segmentation.js").read_text()
-        assert "function runKMeans(k, seed)" in src
+        assert "function runKMeans(k, seed" in src
         assert "seed: seed >>> 0" in src, "runKMeans must post the seed to the worker"
 
     def test_mjs_behaviour(self):
@@ -1583,5 +1583,42 @@ class TestSegmentationSeed:
         )
         assert result.returncode == 0, (
             "validation/test_segmentation_seed.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+
+# ──────────────────────────────────────────────────
+# 30. Auto-label clustering methods
+#     segmentation.js: #seg-method-select picks an entry of SEG_METHODS
+#     (kmeans / stable / smooth / gauss) that buildSegOptions() turns into
+#     worker options. 'kmeans' is the default and leaves the worker output
+#     bit-identical to the plain k-means path.
+#     Behaviour: validation/test_segmentation_methods.mjs.
+# ──────────────────────────────────────────────────
+
+class TestSegmentationMethods:
+    def test_method_select_present(self, html):
+        assert 'id="seg-method-select"' in html, "viewer.html should have the #seg-method-select control"
+
+    def test_kmeans_is_default(self, html):
+        select = html[html.index('id="seg-method-select"'):]
+        select = select[:select.index("</select>")]
+        values = re.findall(r'<option value="([^"]+)"', select)
+        assert values and values[0] == "kmeans", "k-means must stay the first (default) method"
+
+    def test_methods_match_selector(self, html):
+        src = (JS_DIR / "segmentation.js").read_text()
+        select = html[html.index('id="seg-method-select"'):]
+        select = select[:select.index("</select>")]
+        for value in re.findall(r'<option value="([^"]+)"', select):
+            assert re.search(rf"\n    {value}: \{{", src), f"SEG_METHODS has no entry for option '{value}'"
+
+    def test_mjs_behaviour(self):
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_segmentation_methods.mjs")],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert result.returncode == 0, (
+            "validation/test_segmentation_methods.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
