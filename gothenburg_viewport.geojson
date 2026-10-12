@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Gteborg",
+        "years": [
+          2024
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              11.925,
+              57.6848
+            ],
+            [
+              12.0091,
+              57.6848
+            ],
+            [
+              12.0091,
+              57.7297
+            ],
+            [
+              11.925,
+              57.7297
+            ],
+            [
+              11.925,
+              57.6848
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
