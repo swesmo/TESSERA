@@ -366,6 +366,7 @@ venv/bin/pytest validation/ tests/ -v
 | `validation/test_refactoring_guards.py` | API endpoints in JS, critical functions exist, state variables, DOM elements, CSS mode rules, PANEL_LAYOUT table, backend libraries, NDJSON event schema, tessera_eval self-containment |
 | `validation/test_viewer_html.py` | HTML structure, JS syntax, mode classes, panel layout has all modes, large-area validation elements |
 | `validation/test_label_export_import.py` | Shapefile / GeoJSON / JSON round-trip for manual labels |
+| `validation/test_label_import_roundtrip.mjs` | Runs the label import / export functions on small polygons: all shapefile layers, MultiPolygons, holes, ring winding, one save / render per import |
 | `validation/test_viewer_logic.js` | Node-side sanity checks for viewer.js helpers |
 | `tests/test_kfold.py` | K-fold CV, regression metrics, regressor factory |
 | `tests/test_cli.py` | CLI config validation, auto-type detection, dry-run |
