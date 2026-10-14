@@ -152,7 +152,7 @@ an entry sets the active label's code, name and colour.
 
 | Format | Mode | Content |
 |--------|------|---------|
-| **JSON** | Any | Full round-trip (embeddings, vertices, metadata, embedding year, Tessera dataset version) |
+| **JSON** | Any | Full round-trip (embeddings, vertices, the exact pixels of promoted clusters, metadata, embedding year, Tessera dataset version) |
 | **GeoJSON** | Any | Vector polygons (d3-contour vectorisation of pixel sets) |
 | **ESRI Shapefile (ZIP)** | Manual labelling | GIS-compatible polygons |
 | **CSV (points)** | Manual labelling | One row per label (name, code, type, lat, lon, pixel count) — for GEE/ArcGIS point import or a spreadsheet |
@@ -223,9 +223,13 @@ chosen by the user:
 - **No shapefile handy?** TEE ships `austria.zip` — Austrian INVEKOS crop
   field data (42,789 polygons, 17 crop classes) — downloadable from the
   Validation tab or directly at `/sample-data/austria.zip`. Use field
-  `HabUK` (not `Crop`, `Habitat`, or `NVC` — see the [User
+  `HabUK` (not `Crop`, `Habitat`, or `NVC`) and year **2022** (the labels
+  are the 2022 declarations; crops rotate, so a later year scores far
+  lower) — see the [User
   Guide](../public/user_guide.md#worked-example-austriazip) for a full
-  worked example including a spatial train/test split).
+  worked example including a spatial train/test split and [how to compare
+  against the TESSERA
+  paper](../public/user_guide.md#comparing-against-the-tessera-paper).
 
 ### Streaming evaluation
 

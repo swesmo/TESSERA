@@ -24,23 +24,40 @@ Object.defineProperty(window, 'explorerResults', {
 
 // ── Grid Lookup ──
 
-// Grid-based pixel lookup: O(1) arithmetic instead of Map with string keys
+// Grid-based pixel lookup: O(1) arithmetic instead of Map with string keys.
+// {minX, minY, w, h} is the bounding box of the coords. When every cell of it
+// holds a vector in row-major order (a full meshgrid) the vector index is pure
+// arithmetic; otherwise -- the source data has gaps -- `index` maps each cell
+// to its vector index, -1 for a gap.
 function buildGridLookup(coordsData, numVectors) {
-    // Find grid bounds from first/last coords (regular meshgrid)
-    const minX = coordsData[0], minY = coordsData[1];
-    // Find gridWidth: count consecutive coords with same Y
-    let gridWidth = 1;
-    for (let i = 1; i < numVectors; i++) {
-        if (coordsData[i * 2 + 1] !== minY) break;
-        gridWidth++;
+    if (numVectors === 0) return { minX: 0, minY: 0, w: 0, h: 0, index: null };
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < numVectors; i++) {
+        const x = coordsData[i * 2], y = coordsData[i * 2 + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
     }
-    const gridHeight = numVectors / gridWidth;
-    return { minX, minY, w: gridWidth, h: gridHeight };
+    const w = maxX - minX + 1, h = maxY - minY + 1;
+    let dense = numVectors === w * h;
+    for (let i = 0; dense && i < numVectors; i++) {
+        dense = (coordsData[i * 2 + 1] - minY) * w + (coordsData[i * 2] - minX) === i;
+    }
+    let index = null;
+    if (!dense) {
+        index = new Int32Array(w * h).fill(-1);
+        for (let i = 0; i < numVectors; i++) {
+            index[(coordsData[i * 2 + 1] - minY) * w + (coordsData[i * 2] - minX)] = i;
+        }
+    }
+    return { minX, minY, w, h, index };
 }
 function gridLookupIndex(grid, px, py) {
     const rx = px - grid.minX, ry = py - grid.minY;
     if (rx < 0 || ry < 0 || rx >= grid.w || ry >= grid.h) return -1;
-    return ry * grid.w + rx;
+    const cell = ry * grid.w + rx;
+    return grid.index ? grid.index[cell] : cell;
 }
 
 // ── IndexedDB Cache for Vector Data ──
@@ -227,7 +244,13 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
                 fetchNpy(`${base}/indices2.npy.gz`),
             );
         }
-        const results = await Promise.all(tasks);
+        // Per-pixel validity (viewports built with tessera-vq >= 0.9.0):
+        // pixels missing from the source data were filled for quantization
+        // only, and must be treated as gaps, not data.
+        const validTask = vqMeta.has_valid_mask
+            ? fetchNpy(`${base}/valid_mask.npy.gz`)
+            : Promise.resolve(null);
+        const [results, validParsed] = await Promise.all([Promise.all(tasks), validTask]);
         const cb1Parsed = results[0], cb1ScalesParsed = results[1];
         const idx1Parsed = results[2], tileIndex = results[3];
         let cb2Parsed = null, cb2ScalesParsed = null, idx2Parsed = null;
@@ -277,19 +300,29 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         // (segmentation.js::runKMeans) -- feeding it raw uint8 collapses it to
         // one cluster.
         setProgress(60, 'Reconstructing + quantising...');
-        const { values, dimMin, dimMax } = reconstructQuantisedMosaic({
+        // Tile id for each (row, col) of the tile grid from tile_index.json,
+        // -1 where the server sent no tile (no valid pixel in it) -- ids are
+        // not dense once any tile is missing.
+        const tileIds = new Int32Array(nTileRows * nTileCols).fill(-1);
+        for (const tile of tileIndex.tiles) tileIds[tile.row * nTileCols + tile.col] = tile.id;
+        const valid = validParsed ? new Uint8Array(validParsed.rawData) : null;
+        const { values, dimMin, dimMax, pixelIndex } = reconstructQuantisedMosaic({
             idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim,
-            cropTop, cropLeft, fullH, fullW
+            cropTop, cropLeft, fullH, fullW, valid, tileIds
         });
 
-        // Full-grid pixel coords (matches the legacy save).
-        const coords = new Int32Array(numPixels * 2);
-        for (let py = 0; py < outH; py++) {
-            for (let px = 0; px < outW; px++) {
-                const i = py * outW + px;
-                coords[i * 2] = px;
-                coords[i * 2 + 1] = py;
-            }
+        // Pixel coords for the kept (valid) pixels only -- the same sparse
+        // layout as the legacy uint8 path's pixel_coords, which every consumer
+        // already handles via gridLookup.
+        const numKept = pixelIndex.length;
+        const coords = new Int32Array(numKept * 2);
+        for (let k = 0; k < numKept; k++) {
+            const pixel = pixelIndex[k];
+            coords[k * 2] = pixel % outW;
+            coords[k * 2 + 1] = Math.floor(pixel / outW);
+        }
+        if (numKept < numPixels) {
+            console.log(`[VECTORS] ${viewport}/${year}: ${numPixels - numKept} of ${numPixels} pixels are gaps in the source data`);
         }
 
         const metadata = {
@@ -299,6 +332,7 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             clipped_height: outH,
             clipped_width: outW,
             num_total_pixels: numPixels,
+            num_valid_pixels: numKept,
             embedding_dim: dim,
             pixel_size_meters: 10,
             crs: 'EPSG:4326',
@@ -315,12 +349,19 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             },
         };
 
-        const grid = buildGridLookup(coords, numPixels);
-        localVectors = {
+        const grid = buildGridLookup(coords, numKept);
+        // Keep a reference to *this* call's result and return that, never the
+        // shared `localVectors` global: the cache write below awaits, and the
+        // change heatmap downloads two years concurrently -- returning the
+        // global handed both callers whichever year finished last, so the
+        // heatmap compared one year with itself (every distance 0, every
+        // pixel "Major change"). Confirmed live on a v1.1 viewport (dasd).
+        const result = {
             values, coords, metadata,
-            gridLookup: grid, numVectors: numPixels, dim,
+            gridLookup: grid, numVectors: numKept, dim,
             viewport, year: String(year),
         };
+        localVectors = result;
 
         setProgress(100, 'Done');
         if (overlay) overlay.style.display = 'none';
@@ -337,9 +378,9 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             idx1Parsed.rawData.byteLength +
             (isRvq ? (cb2Parsed.rawData.byteLength + cb2ScalesParsed.rawData.byteLength + idx2Parsed.rawData.byteLength) : 0)
         ) / (1024 * 1024);
-        console.log(`[VECTORS] VQ load complete: ${numPixels} px, wire ~${wireMb.toFixed(1)} MB (was ~28 MB)`);
+        console.log(`[VECTORS] VQ load complete: ${numKept} px, wire ~${wireMb.toFixed(1)} MB (was ~28 MB)`);
 
-        return localVectors;
+        return result;
     } catch (err) {
         console.error('[VECTORS] VQ download failed:', err);
         // If this is the contiguous-allocation ceiling, log enough to tell
@@ -420,7 +461,7 @@ async function downloadVectorData(viewport, year) {
             console.log(`[VECTORS] Cache hit for ${viewport}/${year}`);
             const numVectors = cached.values.length / 128;
             const grid = buildGridLookup(cached.coords, numVectors);
-            localVectors = {
+            const result = {
                 values: cached.values,
                 coords: cached.coords,
                 metadata: cached.metadata,
@@ -430,7 +471,8 @@ async function downloadVectorData(viewport, year) {
                 viewport,
                 year: String(year)
             };
-            return localVectors;
+            localVectors = result;
+            return result;  // this call's data, not the shared global (see downloadVectorDataVq)
         }
         await VectorCache.delete(viewport, year);
     }
@@ -607,7 +649,7 @@ async function downloadVectorData(viewport, year) {
             metadata
         }).catch(e => console.warn('[VECTORS] Cache write failed:', e));
 
-        localVectors = {
+        const result = {
             values: embeddingsData,
             coords: coordsData,
             metadata,
@@ -617,9 +659,10 @@ async function downloadVectorData(viewport, year) {
             viewport,
             year: String(year)
         };
+        localVectors = result;
 
         console.log(`[VECTORS] Downloaded and cached: ${numVectors} vectors for ${viewport}/${year}`);
-        return localVectors;
+        return result;  // this call's data, not the shared global (see downloadVectorDataVq)
 
     } catch (error) {
         console.error('[VECTORS] Download failed:', error);

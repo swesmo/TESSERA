@@ -168,6 +168,15 @@ function buildClassColorMap(geojson, fieldName) {
     return map;
 }
 
+// A blank limit field means "no limit" -- sent as null (the server treats a
+// missing key as its default, and null as no limit).
+function optionalLimitInput(id) {
+    const el = document.getElementById(id);
+    if (!el) return undefined;
+    const v = parseInt(String(el.value).replace(/,/g, ''));
+    return Number.isFinite(v) && v > 0 ? v : null;
+}
+
 function addValGeoJsonLayer() {
     const maps = window.maps;
     if (valGeoJsonLayer && maps.rgb) maps.rgb.removeLayer(valGeoJsonLayer);
@@ -177,6 +186,11 @@ function addValGeoJsonLayer() {
     valGeoJsonLayer = L.geoJSON(valGeoJsonData, {
         style: function() {
             return { color: '#ff0000', weight: 1.5, fillOpacity: 0.15, fillColor: '#ff0000' };
+        },
+        // Point ground truth: small circles in the same red, instead of
+        // Leaflet's default pin icons (thousands of pins are unreadable).
+        pointToLayer: function(feature, latlng) {
+            return L.circleMarker(latlng, { radius: 3 });
         },
         onEachFeature: function(feature, layer) {
             if (fieldName && feature.properties[fieldName] != null) {
@@ -438,6 +452,16 @@ function getGroupByField() {
     return !!(el && el.checked);
 }
 
+function getSpatialKfold() {
+    const el = document.getElementById('val-spatial-kfold');
+    return !!(el && el.checked);
+}
+
+function getAreaStratifiedSplit() {
+    const el = document.getElementById('val-area-stratified-split');
+    return !!(el && el.checked);
+}
+
 function getEvalMode() {
     const el = document.getElementById('val-eval-mode');
     return el ? el.value : 'learning_curve';   // 'learning_curve' | 'kfold'
@@ -510,6 +534,7 @@ async function updateYearCoverage(geojson) {
         _annotateYearSelectCoverage(document.getElementById('val-train-year-select'), coverage);
         _annotateYearSelectCoverage(document.getElementById('val-test-year-select'), coverage);
         _annotateYearSelectCoverage(document.getElementById('val-map-year-select'), coverage);
+        checkYearCoverageValidity();
     } catch (e) {
         console.warn('Failed to check year coverage:', e);
     }
@@ -518,6 +543,22 @@ async function updateYearCoverage(geojson) {
 // Annotates one <select>'s options with tile-coverage counts and disables
 // years with no coverage at all. Shared by both the train-year and
 // test-year selects (see updateYearCoverage above).
+//
+// Deliberately does NOT touch sel.value when the current selection turns
+// out to have no coverage -- it used to silently jump to "the first
+// available year" with no indication anything had changed. Confirmed live
+// (Keshav, chasing Frank's "embedding year was 2024 instead of 2022"
+// theory for the Austrian-crop F1 gap): "that silent disabling seems
+// pretty crazy! That should return an error." Ruled out as the actual
+// cause there (Austria's bbox has full 2017-2025 coverage, so nothing
+// would have triggered this path for that shapefile) -- but the silent-
+// substitution behaviour itself was real and worth fixing regardless: a
+// shapefile whose bbox genuinely lacks coverage for the selected year
+// could silently score against a different year's embeddings with zero
+// visible warning. Now the disabled option just sits there, visibly
+// selected-but-unusable ("2022 (no coverage)"), and
+// checkYearCoverageValidity() (called right after this from
+// updateYearCoverage) turns that into a real, blocking error.
 function _annotateYearSelectCoverage(sel, coverage) {
     if (!sel) return;
     Array.from(sel.options).forEach(opt => {
@@ -529,11 +570,45 @@ function _annotateYearSelectCoverage(sel, coverage) {
         opt.disabled = tiles === 0;
         opt.textContent = tiles > 0 ? `${opt.value} (${tiles} tiles)` : `${opt.value} (no coverage)`;
     });
-    // If current selection has no coverage, pick the first available
-    if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
-        const first = Array.from(sel.options).find(o => !o.disabled);
-        if (first) sel.value = first.value;
+}
+
+// Blocks Run Evaluation with a real, visible error when the currently
+// selected training or test year has no embedding coverage for the
+// uploaded shapefile's area -- see _annotateYearSelectCoverage's own
+// comment for why this replaced a silent auto-substitution. Also wired to
+// both year selects' onchange, so picking a valid year clears the error
+// and re-enables Run immediately, without needing to re-upload anything.
+function checkYearCoverageValidity() {
+    const trainSel = document.getElementById('val-train-year-select');
+    const testSel = document.getElementById('val-test-year-select');
+    const bad = [];
+    if (trainSel && trainSel.selectedOptions[0] && trainSel.selectedOptions[0].disabled) {
+        bad.push(`training year ${trainSel.value}`);
     }
+    if (testSel && testSel.selectedOptions[0] && testSel.selectedOptions[0].disabled) {
+        bad.push(`test year ${testSel.value}`);
+    }
+    const runBtn = document.getElementById('val-run-btn');
+    const status = document.getElementById('val-status');
+    if (bad.length > 0) {
+        if (runBtn) runBtn.disabled = true;
+        if (status) {
+            status.textContent = `No embedding coverage for ${bad.join(' and ')} in this area — pick a different year.`;
+            status.style.color = '#dc3545';
+        }
+        return false;
+    }
+    // Valid again -- only re-enable Run if a shapefile is actually loaded
+    // (the field select being enabled is the existing signal for that;
+    // don't stomp on Run staying disabled for that separate reason).
+    const fieldSel = document.getElementById('val-field-select');
+    if (runBtn && fieldSel && !fieldSel.disabled) {
+        runBtn.disabled = false;
+        if (status && status.textContent.startsWith('No embedding coverage for')) {
+            status.textContent = '';
+        }
+    }
+    return true;
 }
 
 function populateValClassTable(classNames, classData, isPixelCounts) {
@@ -711,6 +786,20 @@ function hideFinishButtons() {
     container.innerHTML = '';
 }
 
+// Zero-test-sample warnings (tessera-eval v1.15.1+) arrive as ordinary
+// 'status' events just before 'confusion_matrices' -- and 'done' follows
+// moments later and overwrites the status line with "Done in ...", so the
+// warning was on screen for a fraction of a second and then gone for good.
+// Confirmed live (Moustafa Eweda, 2026-09-30): a run with a genuinely
+// zero confusion-matrix row finished showing only "Done in 12126s --
+// 199,496 pixels, 38 classes". Collect them here and re-show them under
+// the Done line so they survive to the end of the run.
+let _runWarnings = [];
+
+function _isZeroRowWarning(message) {
+    return typeof message === 'string' && message.includes('no test samples for');
+}
+
 function handleStreamEvent(ev) {
     const status = document.getElementById('val-status');
     const metric = document.getElementById('val-metric-select').value;
@@ -737,6 +826,7 @@ function handleStreamEvent(ev) {
         // state (tessera-eval v1.7.2+ carries task on it directly), so set
         // it here too rather than trusting event-ordering alone.
         if (ev.task) currentLargeAreaTask = ev.task;
+        _runWarnings = [];
         updateTaskDetectedLabel();
         // Same cache-hit-skips-field_start issue as above -- redo the
         // metric-selector visibility here too rather than trusting it was
@@ -817,6 +907,15 @@ function handleStreamEvent(ev) {
                 ` vs ${Number(ev.train_count).toLocaleString()} training points.`
             );
         }
+        if (ev.area_stratified_split) {
+            lastChartData.area_stratified_split = true;
+            lastChartData.train_count = ev.train_count;
+            lastChartData.test_count = ev.test_count;
+            setResultsStatus(
+                `Area-stratified split (30% train / class): ${Number(ev.train_count).toLocaleString()} training, ` +
+                `${Number(ev.test_count).toLocaleString()} test pixels.`
+            );
+        }
 
         if (ev.classes) {
             const names = ev.classes.map(c => c.name);
@@ -881,6 +980,8 @@ function handleStreamEvent(ev) {
                 x = ev.pixel_train_count / totalLabels * 100;
             }
             acc._x.push(x);
+            if (!acc.failed) acc.failed = [];
+            acc.failed.push(!!vals.failed);
             if (isRegressionRun) {
                 acc.mean_r2.push(vals.mean_r2);
                 acc.std_r2.push(vals.std_r2);
@@ -962,6 +1063,13 @@ function handleStreamEvent(ev) {
             : '';
         status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}${yearSuffix}`;
         status.style.color = '#28a745';
+        for (const w of _runWarnings) {
+            const div = document.createElement('div');
+            div.textContent = '\u26a0 ' + w;
+            div.style.color = '#b36b00';
+            div.style.marginTop = '4px';
+            status.appendChild(div);
+        }
         const dlBtnH = document.getElementById('val-download-btn');
         if (dlBtnH) dlBtnH.disabled = false;  // always enable — trains on click
         hideFinishButtons();
@@ -973,6 +1081,9 @@ function handleStreamEvent(ev) {
         // Keep-alive, ignore
 
     } else if (ev.event === 'status') {
+        if (_isZeroRowWarning(ev.message) && !_runWarnings.includes(ev.message)) {
+            _runWarnings.push(ev.message);
+        }
         status.dataset.updated = '1';
         status.textContent = ev.message;
         showResultsPanel(ev.message);
@@ -1043,6 +1154,23 @@ function handleStreamEvent(ev) {
 // One summary row per model: mean F1 ± std across folds (k-fold
 // classification -- the learning-curve path fills this table from
 // 'progress' events instead).
+// A model that raised during training (e.g. deep_mlp without PyTorch
+// installed) still reports a numeric 0.0 score from the backend -- that
+// keeps the aggregation math simple server-side, but a bare "0.0000" next
+// to other models' real scores reads as "the worst score", not "didn't
+// run". The `failed` flag (tessera-eval, both run_learning_curve and
+// run_kfold_cv) says which one it actually was; render that distinctly
+// instead of the misleading number. The failure's actual cause is also
+// logged as a status message in the progress log (server.py's
+// classifier_status forwarding) -- this cell is a visual pointer back to
+// that, not a replacement for it.
+function _resultCellHTML(m, val) {
+    if (m && m.failed) {
+        return `<span style="color:#dc3545;" title="This model failed to train -- see the progress log above for why (e.g. a missing optional dependency).">failed</span>`;
+    }
+    return typeof val === 'number' ? val.toFixed(4) : '—';
+}
+
 function renderKfoldClassificationTable(aggregate) {
     const tbody = document.getElementById('val-results-tbody');
     if (!tbody) return;
@@ -1051,9 +1179,10 @@ function renderKfoldClassificationTable(aggregate) {
     let cells = `<td style="padding:6px; font-weight:bold;">Mean ± std</td>`;
     for (const name of _resultsTableModels) {
         const m = aggregate[name];
-        cells += `<td style="text-align:right; padding:6px; font-weight:bold;">${
-            m ? `${m.mean_f1.toFixed(4)} ± ${m.std_f1.toFixed(4)}` : '—'
-        }</td>`;
+        const body = !m ? '—'
+            : m.failed ? _resultCellHTML(m)
+            : `${m.mean_f1.toFixed(4)} ± ${m.std_f1.toFixed(4)}`;
+        cells += `<td style="text-align:right; padding:6px; font-weight:bold;">${body}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);
@@ -1071,7 +1200,7 @@ function appendFoldResultRow(foldNum, models) {
     for (const name of _resultsTableModels) {
         const m = models[name] || {};
         const val = currentLargeAreaTask === 'regression' ? m.r2 : m.mean_f1;
-        cells += `<td style="text-align:right; padding:6px;">${typeof val === 'number' ? val.toFixed(4) : '—'}</td>`;
+        cells += `<td style="text-align:right; padding:6px;">${_resultCellHTML(m, val)}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);
@@ -1569,21 +1698,27 @@ function learningCurveCsvRows(data) {
     const isReg = currentLargeAreaTask === 'regression';
     const rows = [];
 
+    // 'failed' (yes/blank): the model raised during training this fold/pct
+    // (e.g. a missing optional dependency) -- the other columns are still a
+    // real 0.0 fallback so the CSV shape never changes, but this marks
+    // which rows that 0.0 actually means "didn't run" rather than "scored
+    // zero". See _resultCellHTML's comment in the on-screen table for the
+    // same distinction.
     if (data._mode === 'kfold') {
         const foldCols = isReg ? ['r2', 'rmse', 'mae'] : ['mean_f1', 'mean_f1w'];
-        rows.push(['fold', 'model', ...foldCols]);
+        rows.push(['fold', 'model', ...foldCols, 'failed']);
         for (const fr of (data._foldResults || [])) {
             for (const [name, m] of Object.entries(fr.models || {})) {
-                rows.push([fr.fold, name, ...foldCols.map(k => (m[k] ?? ''))]);
+                rows.push([fr.fold, name, ...foldCols.map(k => (m[k] ?? '')), m.failed ? 'yes' : '']);
             }
         }
         const aggCols = isReg
             ? ['mean_r2', 'std_r2', 'mean_rmse', 'std_rmse', 'mean_mae', 'std_mae']
             : ['mean_f1', 'std_f1', 'mean_f1w', 'std_f1w'];
         rows.push([]);
-        rows.push(['summary', 'model', ...aggCols]);
+        rows.push(['summary', 'model', ...aggCols, 'failed']);
         for (const [name, m] of Object.entries(data.aggregate || {})) {
-            rows.push(['mean±std', name, ...aggCols.map(k => (m[k] ?? ''))]);
+            rows.push(['mean±std', name, ...aggCols.map(k => (m[k] ?? '')), m.failed ? 'yes' : '']);
         }
         return rows;
     }
@@ -1591,7 +1726,7 @@ function learningCurveCsvRows(data) {
     const cols = isReg
         ? ['mean_r2', 'std_r2', 'mean_rmse', 'std_rmse', 'mean_mae', 'std_mae']
         : ['mean_f1', 'std_f1', 'mean_f1w', 'std_f1w'];
-    rows.push(['training_pct', 'model', ...cols]);
+    rows.push(['training_pct', 'model', ...cols, 'failed']);
     for (const [name, acc] of Object.entries(data.classifiers)) {
         const xs = (acc._x && acc._x.length) ? acc._x : (data.training_pcts || []);
         for (let i = 0; i < xs.length; i++) {
@@ -1599,6 +1734,7 @@ function learningCurveCsvRows(data) {
                 xs[i] != null ? Number(xs[i]).toFixed(3) : '',
                 name,
                 ...cols.map(k => (acc[k] && acc[k][i] != null ? acc[k][i] : '')),
+                (acc.failed && acc.failed[i]) ? 'yes' : '',
             ]);
         }
     }
@@ -1621,7 +1757,7 @@ function regressionCsv(aggregate) {
     }
     const rows = [[
         'model', 'r2', 'r2_std', 'rmse', 'rmse_std', 'mae', 'mae_std',
-        'outside_range_frac', 'train_min', 'train_max',
+        'outside_range_frac', 'train_min', 'train_max', 'failed',
     ]];
     for (const [name, m] of Object.entries(aggregate || {})) {
         rows.push([
@@ -1630,6 +1766,7 @@ function regressionCsv(aggregate) {
             typeof m.oor_frac === 'number' ? m.oor_frac : '',
             Array.isArray(m.train_range) ? m.train_range[0] : '',
             Array.isArray(m.train_range) ? m.train_range[1] : '',
+            m.failed ? 'yes' : '',
         ]);
     }
     return { rows, stem: 'regression_metrics' };
@@ -2221,6 +2358,10 @@ function generateConfig() {
         "_sampling_choices": "equal | sqrt | proportional",
         "max_patches": parseInt(document.getElementById('val-max-patches').value) || 500,
         "_max_patches": "max 256x256 tile crops for spatial MLP and U-Net (min 100)",
+        "max_spatial_train_samples": optionalLimitInput('val-max-spatial-train'),
+        "_max_spatial_train_samples": "Spatial MLP training points before 4x flip augmentation (null = no limit)",
+        "max_spatial_px_per_patch": optionalLimitInput('val-max-spatial-px'),
+        "_max_spatial_px_per_patch": "labelled pixels per patch used as Spatial MLP points (null = all)",
         "output_dir": "./eval_output",
         "dry_run": false,
         "seed": getSeed(),
@@ -2230,6 +2371,10 @@ function generateConfig() {
         "_kfold": "folds for k-fold cross-validation (2-20)",
         "group_by_field": getGroupByField(),
         "_group_by_field": "keep each shapefile polygon's pixels on one side of train/test (StratifiedGroupKFold) -- off by default, classification only",
+        "spatial_kfold": getSpatialKfold(),
+        "_spatial_kfold": "geographic split for k-fold cross-validation (StratifiedGroupKFold over quantile-binned lon/lat blocks) -- off by default, k-fold only, takes precedence over group_by_field",
+        "area_stratified_split": getAreaStratifiedSplit(),
+        "_area_stratified_split": "reproduces the TESSERA paper's own split: 30% of each class's field area -> train, rest 1/7 val + 6/7 test, per class -- off by default, learning-curve + classification only, takes precedence over group_by_field/spatial_kfold and any other fixed test set",
     };
 
     // Spatial bounding boxes (if any)
@@ -2253,6 +2398,12 @@ function generateConfig() {
 async function runLargeAreaEvaluation() {
     const field = document.getElementById('val-field-select').value;
     if (!field) return;
+
+    // Belt-and-braces: checkYearCoverageValidity() already disables Run and
+    // shows an error the moment a selected year loses coverage, but this
+    // is the one place a request actually goes out -- refuse here too
+    // rather than trust the button's disabled state alone.
+    if (!checkYearCoverageValidity()) return;
 
     const evalMode = getEvalMode();
 
@@ -2381,11 +2532,14 @@ async function runLargeAreaEvaluation() {
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value.replace(/,/g, '')) || 200000,
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
                 max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
+                max_spatial_train_samples: optionalLimitInput('val-max-spatial-train'),
+                max_spatial_px_per_patch: optionalLimitInput('val-max-spatial-px'),
                 task: getTaskOverride(),   // 'auto' lets the server detect; else force it
                 seed: getSeed(),
                 eval_mode: evalMode,
                 group_by_field: getGroupByField(),
-                ...(evalMode === 'kfold' ? { kfold_k: getKfoldK() } : {}),
+                area_stratified_split: getAreaStratifiedSplit(),
+                ...(evalMode === 'kfold' ? { kfold_k: getKfoldK(), spatial_kfold: getSpatialKfold() } : {}),
                 // The held-out test file (if uploaded). The server detects it
                 // itself; we just say which of its columns is the label.
                 ...(hasTestFile() ? { test_field: document.getElementById('val-test-field-select').value } : {}),
@@ -2495,7 +2649,7 @@ function appendResultsRow(pct, classifiers, ev) {
         // read the metric that actually matches (regression events never
         // carry mean_f1, so this used to just show "—" for every row).
         const val = currentLargeAreaTask === 'regression' ? m.mean_r2 : m.mean_f1;
-        cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? val.toFixed(4) : '—'}</td>`;
+        cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? _resultCellHTML(m, val) : '—'}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);
@@ -2533,12 +2687,13 @@ function renderRegressionResults(aggregate) {
             oorCell = `<span style="color:${warn ? '#e0a44b' : '#8a8'}">${pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed(1)}%</span>`;
             if (Array.isArray(metrics.train_range)) anyRange = metrics.train_range;
         }
+        const failedCell = _resultCellHTML(metrics);
         tr.innerHTML = `
             <td style="padding:6px;"><span style="color:${color.line}">\u25cf</span> ${getVariantLabel(name)}</td>
-            <td style="text-align:right; padding:6px;">${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}</td>
-            <td style="text-align:right; padding:6px;">${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}</td>
-            <td style="text-align:right; padding:6px;">${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}</td>
-            <td style="text-align:right; padding:6px;">${oorCell}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? failedCell : `${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}`}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? failedCell : `${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}`}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? failedCell : `${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}`}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? '\u2014' : oorCell}</td>
         `;
         tbody.appendChild(tr);
     }
@@ -2696,12 +2851,15 @@ function renderRegressionBarChart(aggregate) {
     const modelNames = Object.keys(aggregate);
     const r2Values = modelNames.map(n => aggregate[n].mean_r2);
     const r2Std = modelNames.map(n => aggregate[n].std_r2);
-    const colors = modelNames.map(n => getVariantColor(n).line);
+    // A failed model's bar is a real 0 (see _resultCellHTML's comment) --
+    // grey it out and label it, rather than letting a 0-height bar next to
+    // real scores read as "this model scored zero".
+    const colors = modelNames.map(n => aggregate[n].failed ? 'rgba(150,150,150,1)' : getVariantColor(n).line);
 
     valChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: modelNames.map(n => getVariantLabel(n)),
+            labels: modelNames.map(n => getVariantLabel(n) + (aggregate[n].failed ? ' (failed)' : '')),
             datasets: [{
                 label: 'R\u00b2',
                 data: r2Values,
@@ -2759,12 +2917,15 @@ function renderClassificationBarChart(aggregate) {
     const modelNames = Object.keys(aggregate);
     const f1Values = modelNames.map(n => aggregate[n].mean_f1);
     const f1Std = modelNames.map(n => aggregate[n].std_f1);
-    const colors = modelNames.map(n => getVariantColor(n).line);
+    // A failed model's bar is a real 0 (see _resultCellHTML's comment) --
+    // grey it out and label it, rather than letting a 0-height bar next to
+    // real scores read as "this model scored zero".
+    const colors = modelNames.map(n => aggregate[n].failed ? 'rgba(150,150,150,1)' : getVariantColor(n).line);
 
     valChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: modelNames.map(n => getVariantLabel(n)),
+            labels: modelNames.map(n => getVariantLabel(n) + (aggregate[n].failed ? ' (failed)' : '')),
             datasets: [{
                 label: 'Macro F1',
                 data: f1Values,
@@ -2905,6 +3066,14 @@ function applyConfig(config) {
         const gEl = document.getElementById('val-group-by-field');
         if (gEl) gEl.checked = config.group_by_field;
     }
+    if (typeof config.spatial_kfold === 'boolean') {
+        const skEl = document.getElementById('val-spatial-kfold');
+        if (skEl) skEl.checked = config.spatial_kfold;
+    }
+    if (typeof config.area_stratified_split === 'boolean') {
+        const asEl = document.getElementById('val-area-stratified-split');
+        if (asEl) asEl.checked = config.area_stratified_split;
+    }
     // Evaluation method (learning curve vs k-fold CV)
     if (['learning_curve', 'kfold'].includes(config.eval_mode)) {
         const em = document.getElementById('val-eval-mode');
@@ -2981,6 +3150,15 @@ function applyConfig(config) {
     if (config.max_patches) {
         const input = document.getElementById('val-max-patches');
         if (input) input.value = config.max_patches;
+    }
+    // Spatial MLP limits: null in a config means "no limit" (blank field);
+    // a config from before these settings existed leaves the defaults.
+    for (const [key, id] of [['max_spatial_train_samples', 'val-max-spatial-train'],
+                             ['max_spatial_px_per_patch', 'val-max-spatial-px']]) {
+        if (key in config) {
+            const input = document.getElementById(id);
+            if (input) input.value = config[key] == null ? '' : config[key];
+        }
     }
 
     // Restore spatial bounding boxes

@@ -22,8 +22,15 @@ if not VENV_PYTHON.exists():
     VENV_PYTHON = sys.executable
 logger.debug(f"Using Python: {VENV_PYTHON}")
 
-# Year range constant (used in multiple views)
-MIN_YEAR = 2018
+# Year range constant (used in multiple views). geotessera serves 2017-2025
+# (confirmed directly against the registry) -- MIN_YEAR was 2018 here for a
+# while, inconsistent with the 2017 floor already used correctly elsewhere
+# in this file's own callers (api/views/tiles.py's _VALID_MAP_IDS, and the
+# "Add Years" validation in api/views/viewports.py) and in
+# evaluation.js's own config comment. Matters more once dclimate v1.1
+# lands (its own coverage is also 2017-2025) -- see the
+# tessera-viewport-dataset-version-choice memory.
+MIN_YEAR = 2017
 MAX_YEAR = 2025
 
 # Per-user disk quota default (2 GB); overridable in passwd file
@@ -295,21 +302,51 @@ def check_viewport_owner(request, viewport_name):
     """Check if the current user is admin or owner of the viewport.
 
     Returns (True, None) if authorized, (False, JsonResponse 403) if not.
-    Viewports without _config.json (legacy) are allowed for anyone.
+    Viewports without _config.json (legacy) are denied for non-superusers
+    since ownership cannot be verified.
     """
     if request.user.is_superuser:
         return True, None
     current_user = request.user.username if request.user.is_authenticated else None
     config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
     if not config_file.exists():
-        return True, None
+        return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     try:
         with open(config_file) as f:
             cfg = json.load(f)
     except Exception:
-        return True, None
+        return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     owner = cfg.get('created_by')
     if not owner or owner == current_user:
+        return True, None
+    return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+
+def check_viewport_read(request, viewport_name):
+    """May the current user *see* this viewport? Same rule as the viewport
+    list: public viewports are visible to everyone (including anonymous demo
+    visitors), private ones only to their owner and admins.
+
+    Not check_viewport_owner -- that is for changes (delete, add years,
+    cancel processing). Using it for reads made every viewport 403 for anyone
+    but its creator, which broke demo mode.
+
+    Returns (True, None) if allowed, (False, JsonResponse 403) if not.
+    """
+    if request.user.is_superuser:
+        return True, None
+    config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
+    try:
+        with open(config_file) as f:
+            cfg = json.load(f)
+    except FileNotFoundError:
+        return True, None  # legacy viewport: listed as public too
+    except Exception:
+        return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    if not cfg.get('private'):
+        return True, None
+    current_user = request.user.username if request.user.is_authenticated else None
+    if current_user and current_user == cfg.get('created_by'):
         return True, None
     return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 

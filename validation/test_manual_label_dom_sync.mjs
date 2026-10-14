@@ -24,6 +24,10 @@
  * specifically, and asserts *both* copies end up in sync -- proven to
  * fail pre-fix via `git stash` + rerun.
  *
+ * The same two copies must also both be current after a bulk import:
+ * importLabelsJSON() / importGeoJSON() add their labels without rendering
+ * per label (that made import time quadratic) and render once at the end.
+ *
  * Run:  node validation/test_manual_label_dom_sync.mjs
  */
 
@@ -65,20 +69,24 @@ global.clearTimeout = () => {};
 let manualLabels = [];
 let collapsedClasses = new Set();
 let currentManualLabel = null;
-function saveManualLabelsToStorage() {}
+let saveCount = 0;
+function saveManualLabelsToStorage() { saveCount++; }
 function rebuildClassOverlay() {}
 
 const fns = [
     'renderManualLabelsList', 'getClassLabels', '_manualClassRows',
     'stepClassThreshold', 'onManualClassSliderInput', 'updateManualClassThreshold',
     '_applyClassThreshold', 'getClassThreshold', 'activateManualClass', 'toggleClassExpand',
+    'pushManualLabel', 'importLabelsJSON',
 ].map(extract).join('\n\n');
 
 const factory = new Function(
     'manualLabels', 'collapsedClasses', 'currentManualLabel',
     'saveManualLabelsToStorage', 'rebuildClassOverlay',
-    `let _thresholdRAF = null;\nlet _thresholdSaveTimer = null;\n${fns}\n` +
-    'return { renderManualLabelsList, stepClassThreshold, onManualClassSliderInput };'
+    `let _thresholdRAF = null;\nlet _thresholdSaveTimer = null;\n` +
+    'let manualLabelIdCounter = 8;\nfunction rebuildManualOverlays() {}\nfunction markExportDirty() {}\n' +
+    `${fns}\n` +
+    'return { renderManualLabelsList, stepClassThreshold, onManualClassSliderInput, importLabelsJSON };'
 );
 const api = factory(manualLabels, collapsedClasses, currentManualLabel, saveManualLabelsToStorage, rebuildClassOverlay);
 
@@ -119,6 +127,24 @@ assertEq(main.slider, '5', 'manual-labels-list slider after 5 clicks of +');
 assertEq(main.display, '5', 'manual-labels-list display after 5 clicks of +');
 assertEq(mirror.slider, '5', 'panel6-labels-list slider stays in sync');
 assertEq(mirror.display, '5', 'panel6-labels-list display stays in sync');
+
+// Bulk import: 50 labels of a new class arrive with one save and one render,
+// and that render must reach both copies.
+function classRows(id, className) {
+    return document.getElementById(id).querySelectorAll(`[data-class-count="${className}"]`).length;
+}
+assertEq(classRows('manual-labels-list', 'lake') + classRows('panel6-labels-list', 'lake'), 0, 'class "lake" not listed before the import');
+const savesBefore = saveCount;
+const imported = [];
+for (let i = 0; i < 50; i++) {
+    imported.push({ name: 'lake', type: 'point', color: '#1036f4', lat: 52.5 + i * 0.001, lon: -0.2, embedding: new Array(128).fill(0.2) });
+}
+api.importLabelsJSON(imported);
+assertEq(manualLabels.length, 58, '50 labels imported');
+assertEq(saveCount - savesBefore, 1, 'bulk import saves once');
+assertEq(classRows('manual-labels-list', 'lake'), 1, 'manual-labels-list shows the imported class');
+assertEq(classRows('panel6-labels-list', 'lake'), 1, 'panel6-labels-list shows it too');
+assertEq(manualLabels[57].id, 58, 'imported labels continue the id sequence');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
