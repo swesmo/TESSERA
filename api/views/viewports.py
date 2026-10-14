@@ -29,6 +29,7 @@ from api.helpers import (
     estimate_viewport_size,
     cleanup_viewport_embeddings,
     check_viewport_owner,
+    check_viewport_read,
     parse_json_body,
     parse_vq_request,
     get_viewport_vq_config,
@@ -174,7 +175,7 @@ def viewport_info(request, viewport_name):
         validate_viewport_name(viewport_name)
     except ValueError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
-    allowed, deny_response = check_viewport_owner(request, viewport_name)
+    allowed, deny_response = check_viewport_read(request, viewport_name)
     if not allowed:
         return deny_response
     try:
