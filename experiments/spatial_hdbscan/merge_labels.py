@@ -14,34 +14,43 @@ team member's name (the regions drawn to split the work, e.g. "ELIAS and CHRISTO
 in --ignore are not classes; they are reported as regions with the share that is labelled inside.
 Where two exports label the same pixel differently, the later export on the command line wins and
 the conflict is reported.
+
+--types polygon   keep only labels of these TEE types. "polygon" = drawn by hand; "similarity" = a
+                  promoted auto-label (k-means) cluster and "classified" = TEE's nearest-centroid
+                  classification, both made from the embeddings that the clustering is scored on.
+                  "osm" = draft from osm_prelabel.py.
 """
-import argparse, json, re, sys, warnings, zipfile
+import argparse, json, re, sys, warnings
 from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gothenburg_labels"))
+import tee_export_to_geojson as tee  # noqa: E402  (reads the .shp records without GDAL's ring guessing)
+
 warnings.filterwarnings("ignore")
 TEAM = re.compile(r"ELIAS|CHRISTO|ALICE|ISABEL", re.I)
+FROM_EMBEDDINGS = {"similarity", "classified"}
 
 
-def read_export(path):
-    """All polygon features of one export as a GeoDataFrame with a normalised 'name' column (EPSG:4326)."""
+def read_export(path, types=()):
+    """Polygon features of one export as a GeoDataFrame with 'name' (normalised) and 'type' (EPSG:4326)."""
     import geopandas as gpd
-    import pandas as pd
-    path = Path(path)
-    if path.suffix.lower() == ".zip":
-        with zipfile.ZipFile(path) as z:
-            layers = [n for n in z.namelist() if n.lower().endswith(".shp")]
-        parts = [gpd.read_file(f"zip://{path}!{n}") for n in layers]
-        g = gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), crs=parts[0].crs)
-    else:
-        g = gpd.read_file(path)
-    key = next((c for c in ("name", "label_name", "class", "label") if c in g.columns), None)
-    if key is None:
-        raise SystemExit(f"{path}: no name / label_name column ({list(g.columns)})")
-    g = g[g.geometry.notna() & g.geometry.geom_type.isin(["Polygon", "MultiPolygon"])].copy()
-    g["name"] = g[key].astype(str).str.strip().str.upper()
-    return g.to_crs(4326)[["name", "geometry"]]
+    from shapely.geometry import Polygon
+    rows = []
+    for l in tee.read_export(path):
+        if l["kind"] != "polygon":
+            continue
+        geom = Polygon()
+        for r in l["geom"]:  # even-odd: TEE writes outer rings counter-clockwise, shapefile readers expect clockwise
+            geom = geom.symmetric_difference(Polygon(r).buffer(0))
+        rows.append({"name": l["props"]["name"].upper(), "type": l["props"].get("type") or "polygon", "geometry": geom})
+    if not rows:
+        raise SystemExit(f"{path}: no polygons")
+    g = gpd.GeoDataFrame(rows, crs=4326)
+    if types:
+        g = g[g["type"].isin(types) | g["name"].str.contains(TEAM)]
+    return g[["name", "type", "geometry"]]
 
 
 def main():
@@ -49,6 +58,7 @@ def main():
     ap.add_argument("out"); ap.add_argument("exports", nargs="+")
     ap.add_argument("--metadata", default=str(Path.home() / "tee_data/vectors/Gteborg/2024/metadata.json"))
     ap.add_argument("--ignore", default="")
+    ap.add_argument("--types", default="")
     a = ap.parse_args()
     import geopandas as gpd
     import pandas as pd
@@ -60,7 +70,8 @@ def main():
     ignore = {n.strip().upper() for n in a.ignore.split(",") if n.strip()}
     is_region = lambda n: n in ignore or bool(TEAM.search(n))
 
-    sources = [(Path(p).name, read_export(p)) for p in a.exports]
+    types = tuple(t.strip() for t in a.types.split(",") if t.strip())
+    sources = [(Path(p).name, read_export(p, types)) for p in a.exports]
     classes = sorted({n for _, g in sources for n in g["name"].unique() if not is_region(n)})
     print(f"viewport grid {shape[1]} x {shape[0]} pixels; classes: {classes}")
     combined = np.zeros(shape, np.int16)
@@ -73,6 +84,11 @@ def main():
                       fill=0, dtype="int16") if len(g) else np.zeros(shape, np.int16)
         rasters.append(r)
         print(f"\n{name}: {len(g)} polygons, {int((r > 0).sum())} labelled pixels ({100 * (r > 0).mean():.1f} % of the viewport)")
+        emb = g[g["type"].isin(FROM_EMBEDDINGS)]
+        if len(emb):
+            m = rasterize([(geom, 1) for geom in emb.geometry], out_shape=shape, transform=T, fill=0, dtype="uint8")
+            print(f"    NOTE: {int(m.sum())} of these pixels come from TEE types {sorted(emb['type'].unique())} "
+                  f"(made from the embeddings, not an independent ground truth); --types polygon leaves them out")
         for i, c in enumerate(classes, 1):
             if (r == i).any():
                 print(f"    {c:16s} {int((r == i).sum()):7d} px")
@@ -92,7 +108,7 @@ def main():
         if m.any():
             print(f"region {label}: {100 * m.mean():.1f} % of the viewport, {100 * (combined[m] > 0).mean():.1f} % of it labelled")
     out = Path(a.out)
-    allg = gpd.GeoDataFrame(pd.concat([g[~g["name"].map(is_region)] for _, g in sources], ignore_index=True), crs=4326)
+    allg = gpd.GeoDataFrame(pd.concat([g[~g["name"].map(is_region)][["name", "geometry"]] for _, g in sources], ignore_index=True), crs=4326)
     allg.to_file(out, driver="GeoJSON")
     np.savez_compressed(out.with_suffix(".npz"), cls=combined, classes=np.array(classes))
     print(f"\nwrote {out} ({len(allg)} polygons) and {out.with_suffix('.npz').name}")

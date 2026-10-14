@@ -92,8 +92,10 @@ Only hand-drawn polygons are ground truth. TEE's exports mix three kinds of feat
 `type`): `polygon` (drawn by hand), `similarity` (pixels TEE matched to a seed pixel by embedding
 distance) and, with "classified pixels" ticked, `classified` (TEE's nearest-centroid
 classification of every pixel). The last two are derived from the embeddings that the clustering
-is scored on, so scoring against them is circular. Keep `type == "polygon"` before merging:
-`python -c "import geopandas as g; d = g.read_file('export.geojson'); d[d.type == 'polygon'][['name', 'geometry']].to_file('hand.geojson', driver='GeoJSON')"`.
+is scored on, so scoring against them is circular: merge with `--types polygon` (or
+`--types polygon,osm` with the OpenStreetMap draft). TEE's import turns every polygon into type
+`polygon`, so nobody should import cluster polygons or the OSM draft into the session they label in.
+Files, OSM draft and how-to: `gothenburg_labels/README.md`.
 
 Results on the partial labels of 12 Oct (PRELIMINARY: 5 classes, viewport shifted by ~450 m
 against the one the embeddings were cached for; re-run when the labelling is complete):
