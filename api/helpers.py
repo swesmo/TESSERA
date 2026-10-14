@@ -322,6 +322,35 @@ def check_viewport_owner(request, viewport_name):
     return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
 
+def check_viewport_read(request, viewport_name):
+    """May the current user *see* this viewport? Same rule as the viewport
+    list: public viewports are visible to everyone (including anonymous demo
+    visitors), private ones only to their owner and admins.
+
+    Not check_viewport_owner -- that is for changes (delete, add years,
+    cancel processing). Using it for reads made every viewport 403 for anyone
+    but its creator, which broke demo mode.
+
+    Returns (True, None) if allowed, (False, JsonResponse 403) if not.
+    """
+    if request.user.is_superuser:
+        return True, None
+    config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
+    try:
+        with open(config_file) as f:
+            cfg = json.load(f)
+    except FileNotFoundError:
+        return True, None  # legacy viewport: listed as public too
+    except Exception:
+        return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    if not cfg.get('private'):
+        return True, None
+    current_user = request.user.username if request.user.is_authenticated else None
+    if current_user and current_user == cfg.get('created_by'):
+        return True, None
+    return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+
 def parse_json_body(request):
     """Parse JSON from request body. Returns (data_dict, error_response).
 
