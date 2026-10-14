@@ -102,6 +102,10 @@ against the one the embeddings were cached for; re-run when the labelling is com
 - `results/final_gbg_labels_hand.*`: hand-drawn polygons only, 62,142 pixels = 22 % of the
   viewport. k = 5, 20 seeds: baseline AMI 0.467 +- 0.033 / ARI 0.468 / stability 0.63;
   over-cluster 32 + MRF 0.497 +- 0.001 / 0.490 / 0.95. Use these.
+- `results/final_gbg_labels_osmhand.*` (15 Oct): OpenStreetMap draft as base layer + the hand-drawn polygons on
+  top (`gothenburg_labels/data/eval_grid_Gteborg/gt_osm+hand_2026-10-15.geojson`), 149,377 pixels = 54 %:
+  baseline AMI 0.399 +- 0.032 / ARI 0.346, over-cluster 32 + MRF 0.424 +- 0.001 / 0.366.
+  `final_gbg_labels_osmonly.*`: the draft alone on the pixels without a hand label (87,235): 0.358 -> 0.371.
 - `results/final_gbg_labels.*`, `results/spectral_gbg_labels.json`: scored on all 81,295 labelled
   pixels, i.e. INCLUDING 28,855 similarity-matched FOREST pixels. The scores are inflated
   (baseline AMI 0.521); kept only for comparison.

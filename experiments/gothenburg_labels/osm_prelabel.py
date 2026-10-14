@@ -128,6 +128,9 @@ def main():
     ap.add_argument("--metadata", default=str(Path.home() / "tee_data/vectors/Gteborg_GT/2024/metadata.json"))
     ap.add_argument("--purity", type=float, default=0.5)
     ap.add_argument("--fine", type=int, default=5)
+    ap.add_argument("--ref", action="store_true",
+                    help='also write osm_draft_<region>_REF.geojson: classes renamed "REF <class>" in lighter colours, '
+                         'to show the draft in TEE while correcting it (merge_labels.py skips REF names)')
     a = ap.parse_args()
     meta = json.loads(Path(a.metadata).read_text())
     gt, shape = meta["geotransform"], (meta["mosaic_height"], meta["mosaic_width"])
@@ -184,6 +187,11 @@ def main():
             feats += [{"type": "Feature", "properties": props, "geometry": {"type": "Polygon", "coordinates": [r]}} for r in mask_polygons(m, gt)]
         f = out / f"osm_draft_{tag}.geojson"
         f.write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+        if a.ref:
+            light = lambda c: "#" + "".join(f"{(int(c[i:i + 2], 16) + 255) // 2:02x}" for i in (1, 3, 5))
+            ref = [{**x, "properties": {**x["properties"], "name": "REF " + x["properties"]["name"],
+                                        "color": light(x["properties"]["color"])}} for x in feats]
+            (out / f"osm_draft_{tag}_REF.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": ref}))
         per = ", ".join(f"{n} {int((free & (draft == j)).sum())}" for j, n in enumerate(names, 1))
         print(f"\n{tag}: {int(area.sum())} px; by hand {100 * hand.any(0)[area].mean():.1f} %, cluster only {100 * (cluster & ~hand.any(0))[area].mean():.1f} %, "
               f"new from OSM {100 * free[area].mean():.1f} % ({per})\n    wrote {f} ({len(feats)} polygons)")

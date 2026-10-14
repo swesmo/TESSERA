@@ -100,16 +100,25 @@ def without_holes(poly):
     return out
 
 
+def rings_to_geometry(rings):
+    """One record's rings as a shapely geometry, filled even-odd whatever their orientation. A single
+    ring stays as drawn: buffer(0) would drop one lobe of a self-intersecting hand-drawn outline,
+    while TEE (and rasterio) fill both."""
+    from shapely.geometry import Polygon
+    if len(rings) == 1:
+        return Polygon(rings[0])
+    region = Polygon()
+    for r in rings:  # TEE writes outer rings counter-clockwise, shapefile readers expect clockwise
+        region = region.symmetric_difference(Polygon(r).buffer(0))
+    return region
+
+
 def ring_mask(rings, gt, shape):
     """Even-odd fill of the rings of one record on the viewport grid (pixel-centre rule)."""
     from affine import Affine
     from rasterio.features import rasterize
-    from shapely.geometry import Polygon
     T = Affine(gt["a"], 0.0, gt["c"], 0.0, gt["e"], gt["f"])
-    region = Polygon()
-    for r in rings:
-        region = region.symmetric_difference(Polygon(r).buffer(0))
-    return rasterize([(region, 1)], out_shape=shape, transform=T, fill=0, dtype="uint8").astype(bool)
+    return rasterize([(rings_to_geometry(rings), 1)], out_shape=shape, transform=T, fill=0, dtype="uint8").astype(bool)
 
 
 def mask_polygons(mask, gt):
