@@ -36,7 +36,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, group by field, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, area-stratified split, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -71,11 +71,13 @@ Viewport Manager from then on.
 ### Path 3: Evaluate classifiers
 
 1. In the Viewport Manager, go to the **Validation** tab and click **Evaluate**
-2. Drag and drop a ground-truth `.zip` shapefile (e.g., habitat survey polygons) onto the upload area
+2. Drag and drop a ground-truth `.zip` shapefile (habitat survey polygons or points) onto the upload area
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
-> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2024**, and click Run. See [Worked Example: austria.zip](#worked-example-austria-zip) for a full walkthrough, including a spatial train/test split.
+> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2022**, and click Run. See [Worked Example: austria.zip](#worked-example-austriazip) for a full walkthrough, including a spatial train/test split and how to compare your numbers against the TESSERA paper.
+>
+> **Use 2022, not a later year.** These labels are the 2022 INVEKOS declarations, and crops rotate every season — pairing them with a different year's embeddings asks the classifier to predict what was growing in a field two years earlier. It fails badly: weighted F1 drops from ~0.78 (2022) to ~0.30 (2024) on an otherwise identical run.
 
 ### Path 4: Just want a fun image?
 
@@ -146,7 +148,9 @@ Each mode rearranges the six panels. Panels in the same position always show the
 
 ### Switching Modes
 
-Use the **layout dropdown** in the top-left of the header bar to switch between Explore, Change Detection, and Labelling. Validation mode is accessed from the Viewport Manager's **Validation** tab (not the dropdown).
+TEE has four modes: **Explore**, **Change Detection**, **Labelling**, and **Validation**. Use the **layout dropdown** in the top-left of the header bar to switch between Explore, Change Detection, and Labelling — these three all work on the viewport you currently have loaded, so you can freely switch between them.
+
+**Validation** mode is different: it has no loaded viewport at all (you upload your own ground-truth shapefile and evaluate directly against live embeddings — see [Validation](#validation-evaluating-classifiers) below), so it isn't one of the dropdown's choices. Enter it from the Viewport Manager's **Validation** tab's **Evaluate** button; the layout dropdown is greyed out for the duration, since none of Explore/Change Detection/Labelling have a viewport to work with while you're there. Use **← Back** to leave Validation mode and return to the Viewport Manager.
 
 ### Switching Years
 
@@ -542,7 +546,7 @@ In all cases, open **http://localhost:8001** in your browser after running the c
 |---------|------------|
 | `Connection refused` | The compute server isn't running. Re-run the deploy script. |
 | `Cannot reach hosted server` | Check your internet connection: `curl https://tee.cl.cam.ac.uk/health` |
-| `No GeoTessera tiles found` | Not all years have coverage everywhere. Try year **2025** (the widest coverage). |
+| `No GeoTessera tiles found` | Evaluations use the v1.1 embeddings, which cover the whole land surface for 2017–2025, so this usually means the area is over the sea or outside 2017–2025. A few areas were left out of individual years for lack of satellite observations; try a neighbouring year. |
 | `ModuleNotFoundError` (All Local) | Dependencies aren't installed, or you're not running from inside the `TEE` folder. From inside it: `venv/bin/pip install -r requirements.txt` |
 | `ModuleNotFoundError` (Remote GPU) | Dependencies aren't installed on the server. Run: `ssh gpu-box '~/TEE/venv/bin/pip install -r ~/TEE/requirements.txt'` |
 | Script exits immediately with no output | You ran `deploy-compute.sh` from outside the `TEE` folder — `cd` into it first |
@@ -587,18 +591,35 @@ If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, insta
 
 ## Validation (Evaluating Classifiers)
 
-Validation answers the question: **"How well can machine learning distinguish my habitat classes using satellite embeddings?"** You upload a ground-truth shapefile (polygons with habitat labels from a field survey, for example), and TEE trains several classifiers on increasing amounts of your data. The result is a **learning curve** showing how accuracy improves as more training data is added, plus a **confusion matrix** showing which classes get mixed up.
+Validation answers the question: **"How well can machine learning distinguish my habitat classes using satellite embeddings?"** You upload a ground-truth shapefile (polygons or points with habitat labels from a field survey, for example), and TEE trains several classifiers on increasing amounts of your data. The result is a **learning curve** showing how accuracy improves as more training data is added, plus a **confusion matrix** showing which classes get mixed up.
 
 ![Validation — learning curves, confusion matrix, and ground truth overlay](images/validation.png)
 
 > All evaluation runs on your **compute server**, not on the hosted TEE website. Your ground-truth data stays on your machine. See [Compute Server Setup](#compute-server-setup) above if you haven't set this up yet.
+
+> **A caution on comparing scores: the evaluation protocol can move a score as much as the
+> model does.** Several settings below aren't just tuning knobs — changing one, with the
+> exact same data and the exact same classifier, can shift the reported F1/R² by as much as
+> switching to a genuinely better or worse model would. On a real 17-class run we measured:
+> **Macro vs Weighted F1** (same predictions, different aggregation) — a difference of over
+> 0.2; **[Sampling Strategy](#sampling-strategy)** (sqrt-proportional vs equal) — up to 0.1;
+> **[Group by Field](#group-by-field-avoiding-within-field-leakage)** (removing pixel-level
+> leakage) — up to 0.06, usually downward. None of these is a bug, and none is "more
+> correct" in the abstract — macro and weighted F1 answer different questions, and a
+> leakage-free split is the more honest number even though it's lower. The practical
+> takeaway: **don't compare two F1 numbers unless you know both used the same metric,
+> sampling strategy, and split settings** — a score that looks worse after you change a
+> setting usually just got more honest, not more wrong, and a score that looks better after
+> changing a setting isn't necessarily a better model.
 
 ### Step-by-Step
 
 | Step | Panel | What to do |
 |------|-------|------------|
 | 1 | — | In the Viewport Manager, go to the **Validation** tab and click **Evaluate** |
-| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Uploads **accumulate** (the polygons are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
+| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Polygons, points, or a mix all work. Uploads **accumulate** (the features are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
+
+> **Point ground truth:** each point is treated as one labelled 10 m pixel. TEE uses the points themselves rather than sampling inside them (a random subset if there are more than **Max pixel samples**), and for the area-based **Sampling** strategies each point counts as one pixel's area. Points appear as small red circles on the map. Spatial MLP and U-Net need labelled pixels inside each 256×256 patch, so sparse points give them much less to learn from than polygons do.
 | 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
 | 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
 | 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#train-test-years-optional) — leave both the same for a standard single-year run). *(Optional)* drop a repeat-survey shapefile in **Test Ground Truth** to use it as the held-out test set (see [Separate Test File](#separate-test-file-optional)) |
@@ -659,6 +680,8 @@ Each classifier has adjustable parameters. Click the **...** button next to a cl
 | U-Net | Learning rate | 0.001 | Step size for the neural network optimiser. |
 | U-Net | Depth | 3 | Number of encoder/decoder levels. Deeper = captures larger-scale patterns. |
 | U-Net | Base filters | 64 | Number of feature channels in the first layer. Doubles at each level. |
+| U-Net | Max train patches | no limit | Learning curve only. Caps how many patches U-Net trains on at each step; blank trains on the requested percentage of all extracted patches. |
+| U-Net | Max test patches | no limit | Learning curve only. Caps how many patches U-Net is tested on at each step; blank tests on every patch not used for training. A small cap leaves many classes with no test samples, so their confusion-matrix rows show 0. The progress log reports the actual counts at each step. |
 
 ### Hyperparameter Variants
 
@@ -699,8 +722,10 @@ When you select Spatial MLP or U-Net, TEE needs to download actual embedding til
 | Setting | Default | What it controls |
 |---------|---------|-----------------|
 | **Max spatial/U-Net patches** | 500 | How many patches to extract. More patches = better accuracy but longer download and training time. Minimum 100. |
+| **Max Spatial MLP training points** | 50,000 | Spatial MLP trains on at most this many points (a pixel plus its neighbourhood), chosen at random; each is then flipped into 4 training examples. A learning-curve step that would use more trains on the same capped set, so the curve flattens above this value. Blank = no limit. Larger values need more memory and time. |
+| **Spatial features per patch** | 5,000 | How many labelled pixels in each patch become Spatial MLP points, chosen at random (a fully labelled 256×256 patch has 65,536). Blank = every labelled pixel. Larger values need more memory. |
 
-Tiles are sampled from across the shapefile area so patches come from diverse geographic regions (maximum 5 patches per tile). During U-Net training, each patch is augmented 16× (4 rotations × 2 flips × 2 noise levels) to increase the effective training set size.
+Tiles are sampled from across the shapefile area so patches come from diverse geographic regions (each tile contributes up to Max patches ÷ number of tiles, and at least 5). During U-Net training, each patch is augmented 16× (4 rotations × 2 flips × 2 noise levels) to increase the effective training set size.
 
 > **Tip:** If you only want to test pixel classifiers (k-NN, Random Forest, etc.), you don't need spatial patches at all — uncheck Spatial MLP and U-Net, and the evaluation will be much faster since no tiles need to be downloaded.
 
@@ -779,6 +804,8 @@ TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/
 
 **What's in it:** 42,789 agricultural field polygons from Austria's INVEKOS system (the EU farm-subsidy declarations), just east of Vienna — roughly 16.36°E–17.05°E, 48.06°N–48.48°N. The original 153 German crop-type declarations have been grouped into 17 broader crop classes.
 
+**Which year to use: 2022.** The declarations are from the **2022** INVEKOS submission, so 2022 is the only year whose embeddings actually describe the crop each label names. Because crops rotate annually, a later year measures a different planting: on an identical run, weighted F1 falls from ~0.78 with 2022 embeddings to ~0.30 with 2024. This is the single most common way to get a surprisingly low score on this dataset.
+
 **Which field to use:** the shapefile carries several attribute columns; use **`HabUK`** as the class field (or the equivalent `HabUKcode`, if you prefer short codes like `AC01`):
 
 | Column | Contents | Use for evaluation? |
@@ -787,7 +814,9 @@ TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/
 | `HabUKcode` | Same 17 groups, as short codes `AC01`–`AC17` | Yes, if you prefer codes to names |
 | `Habitat` / `NVC` | 153 raw German crop declarations (unsimplified) | Not recommended for a first run — too fine-grained, many classes have very few fields |
 
-The 17 classes are unevenly sized (from 150 fields for `AC06` Sunflower up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
+The 17 classes are unevenly sized (from 150 fields for `AC06` Mustard up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
+
+That imbalance is also why the **Macro F1 / Weighted F1** selector above the chart matters so much here — macro and weighted F1 can differ enormously on data this skewed, so check which one you're reading before drawing conclusions from a low number.
 
 **Doing a spatial split:** field boundaries reflect real farm/parcel layout, so nearby fields often share the same crop due to local rotation and farm management — exactly the kind of spatial autocorrelation the [Spatial Train/Test Split](#spatial-train-test-split-optional) feature above is for. The dataset is wider east–west (~0.69°) than north–south (~0.42°), so a simple east/west split works well:
 
@@ -802,7 +831,7 @@ The **Evaluation method** dropdown chooses how classifiers are scored:
 
 | Method | What it does | When to use |
 |--------|-------------|-------------|
-| **Learning curve** (default) | Trains at increasing fractions of the data (1%–80%) with repeated random resamples, against a held-out (or spatial) test set. The output is a curve of accuracy vs training size. | You want to see whether you have *enough* labels, or how quickly the classifier learns. |
+| **Learning curve** (default) | Trains at increasing fractions of the data (1%–80%, or up to 100% when the test set is separate) with repeated random resamples, against a held-out (or spatial) test set. The output is a curve of accuracy vs training size. | You want to see whether you have *enough* labels, or how quickly the classifier learns. |
 | **K-fold cross-validation** | Splits the **sampled** labelled pixels into *k* folds; each fold is held out once for testing while the other *k*−1 train. Reports the mean ± standard deviation across folds. | You want a single robust accuracy estimate that uses every sampled pixel for both training and testing. |
 
 When you pick **K-fold cross-validation**, a **Folds (k)** box appears (2–20, default 5).
@@ -813,7 +842,7 @@ Not every pixel in your shapefile — the points that **Max pixel samples** and 
 
 It supports the **pixel classifiers** (k-NN, Random Forest, XGBoost, MLP, Deep MLP) **and the Spatial MLP models** (3×3, 5×5). **U-Net is not available in k-fold mode** — it trains on 256×256 image patches, not points, so there is no point-based fold split for it; use the learning curve to evaluate U-Net. If U-Net is ticked when you run a k-fold evaluation it is dropped with a note in the log.
 
-Spatial MLP in k-fold cross-validates over its **neighbourhood-feature points** — a *different*, generally larger set than the pixel points, extracted from the same downloaded 256×256 tile crops (≤ 5000 px per patch). Picking k-fold with a Spatial MLP model therefore triggers the tile download, so the run is slower than a pixel-only k-fold run.
+Spatial MLP in k-fold cross-validates over its **neighbourhood-feature points** — a *different*, generally larger set than the pixel points, extracted from the same downloaded 256×256 tile crops (up to **Spatial features per patch** labelled pixels each, default 5,000). Picking k-fold with a Spatial MLP model therefore triggers the tile download, so the run is slower than a pixel-only k-fold run.
 
 #### How the folds are chosen
 
@@ -840,13 +869,22 @@ The panel then shows a **per-fold table**, a **"Mean ± std" summary row**, and 
 
 #### K-fold is *not* a spatial split
 
-Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional), or turn on [Group by Field](#group-by-field-avoiding-within-field-leakage) below — it works in both modes. K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
+Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, turn on [Spatial k-fold](#spatial-k-fold-a-geographic-split) or [Group by Field](#group-by-field-avoiding-within-field-leakage) below, or use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional). K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
 
 For **Spatial MLP** this is doubly true: its features are 3×3 or 5×5 windows, so neighbouring windows overlap in the pixels they see, and two windows that straddle a fold boundary share input — the optimism is larger than for the pixel models. Treat a k-fold Spatial MLP score as a best case.
 
+### Spatial k-fold (a geographic split)
+
+K-fold's own random shuffling has no notion of location at all — see [K-fold is not a spatial split](#k-fold-is-not-a-spatial-split) above. Tick **Spatial k-fold (geographic split)**, shown once you pick K-fold cross-validation, to fix that: each sampled point is assigned to one of *k* geographic blocks (grouped by location, not by class), and no block's points ever appear in more than one fold.
+
+- **Off by default**, same reasoning as Group by Field below — it changes every reported k-fold score, usually downward.
+- **K-fold only** — the learning curve already has its own geographic split, [Spatial Train/Test Split](#spatial-train-test-split-optional).
+- **Takes precedence over Group by Field** if both are ticked (a status message in the progress log says so) — only one grouping can drive a single split, and a geographic split is the stronger check of the two here.
+- **Falls back to plain k-fold, with a status message,** if your points are too tightly clustered to form *k* distinct geographic blocks (try a smaller *k*), or if this run hit the on-disk result cache without coordinates (re-run once to regenerate it).
+
 ### Group by Field (avoiding within-field leakage)
 
-By default, both evaluation methods split at the level of individual **pixels**, not whole **fields** (shapefile polygons). Because embeddings from the same field are usually very similar to each other, a model can end up partly "recognizing the field" rather than genuinely learning what the habitat looks like — if some of a field's pixels are in training and others in testing, the model gets an unfair hint. This makes reported scores **optimistic**: on a real test (2 million embeddings across 6,674 fields), turning this on dropped macro F1 by **0.11–0.14** for the same data and the same models — a bigger effect than the difference between any two classifiers tested.
+By default, both evaluation methods split at the level of individual **pixels**, not whole **fields** (shapefile polygons). Because embeddings from the same field are usually very similar to each other, a model can end up partly "recognizing the field" rather than genuinely learning what the habitat looks like — if some of a field's pixels are in training and others in testing, the model gets an unfair hint. This makes reported scores **optimistic**: on a real test (Austrian crop data, ~78,000 labelled pixels), turning this on dropped macro F1 by roughly **0.03** for the same data and the same models.
 
 Tick **Group by field (no leakage)**, next to the evaluation method, to fix this: every field's pixels are kept entirely on one side of the split — in the learning curve, a fixed set of held-out fields (about 20% of them) never contributes a training pixel at any training percentage; in k-fold, no field's pixels ever appear in more than one fold.
 
@@ -856,6 +894,50 @@ Tick **Group by field (no leakage)**, next to the evaluation method, to fix this
 - **Not available right after a config upload that hits the result cache** — re-run the evaluation once to regenerate it, then the option works normally.
 
 If your F1/R² drops noticeably when you turn this on, that's the more honest number, not a bug — it means the un-grouped score was benefiting from the model recognizing fields it had already partly seen.
+
+### Area-Stratified Split (30% per class, optional)
+
+Group by Field above fixes *leakage* (a field's pixels never crossing the split) but says
+nothing about *how much* of each class ends up in training — that's still governed by
+[Sampling Strategy](#sampling-strategy)'s shared point budget, so a rare class can still end
+up thin on training data purely because it's rare. This option fixes that too, by
+reproducing the TESSERA paper's own Austrian-crop split exactly rather than approximating
+it: **30% of each class's field *area*** goes to training, the rest split 1/7 val, 6/7 test
+— computed **independently per class**, so a class's training share never depends on how
+common any other class is.
+
+Tick **Area-stratified split (30% train / class)**, next to Group by Field, to use it.
+
+- **Off by default.** Like Group by Field, this is a real, deliberate change to what your
+  score means — whole fields are shuffled (by the random seed) then walked in area order
+  per class, so which fields land in train vs. test is randomized but reproducible.
+- **Field-level, like Group by Field** — a field's pixels never cross the split — but the
+  *rule* is different: Group by Field holds out a random ~20% of fields overall; this fixes
+  a 30% *area quota per class*. Rare and common classes are treated identically as a
+  fraction of themselves, not as a shared competition for one pooled budget the way
+  [Sampling Strategy](#sampling-strategy)'s Equal/Sqrt/Proportional choice is.
+- **This is the literal paper protocol, not a way to raise your score.** On a real run it
+  actually scored *lower* than TEE's plain defaults, not higher — a stricter, less
+  leakage-prone split isn't the same thing as a better one. Use this option when you
+  specifically want the paper's exact split rule reproduced, not to chase a higher number.
+- **Classification only, learning curve only** — a per-class area quota has no meaning for
+  a continuous regression target, and k-fold makes its own folds.
+- **Takes precedence** over Group by Field, Spatial k-fold, a drawn Spatial Train/Test
+  Split, different train/test years, and a separate test file — only one fixed test set can
+  drive a single run, and a status message in the progress log says so whenever more than
+  one of these is set at once.
+- **The 10% "val" share is computed but not otherwise used** — TEE's learning curve has no
+  top-level validation step of its own (`deep_mlp` still does its own internal held-out
+  split for checkpoint selection, from whichever training percentage it's handed), so those
+  points are simply excluded from both the train and test pools rather than silently
+  folded into either — keeping the reported 30% train / 60% test split an honest match to
+  the paper's own ratios.
+- A class with very few fields can end up with an empty val (or even test) bucket for that
+  class specifically — a real consequence of having only a handful of fields to split, not
+  a bug.
+
+The results panel notes the split, e.g. *"Area-stratified split (30% train / class): 52,616
+training, 109,674 test pixels."*
 
 ### Reproducibility: The Random Seed
 
@@ -871,7 +953,7 @@ The learning curve is the main output of a **learning-curve** evaluation. It sho
 
 ![Example learning curve](images/learning_curve.png)
 
-- **X axis**: percentage of the training data used (from 1% up to 80%)
+- **X axis**: percentage of the training data used, from 1% up to 80%. With a random split the remaining 20% is the test set, so 80% is the most that can be trained on. When the test set is separate (spatial rectangles, a different test year, a test file, area-stratified split or group-by-field holdout), the curve goes up to 100% of the training data. Every step uses the same number of repeated runs.
 - **Y axis**: F1 score — a measure of accuracy from 0 (worst) to 1 (perfect). The shaded band around each line shows ±1 standard deviation across repeated runs.
 - **Steeper curves** mean the embeddings separate your classes well even with very little training data — a good sign
 - **Flat curves at low F1** suggest the classes are hard to distinguish, or you may need different training features

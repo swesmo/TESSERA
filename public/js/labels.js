@@ -499,7 +499,8 @@ function rebuildClassOverlay(className) {
         }
         // Add polygon outlines
         if (label.type === 'polygon' && label.vertices) {
-            const polyLatLngs = label.vertices.map(v => L.latLng(v[0], v[1]));
+            const polyLatLngs = [label.vertices, ...(label.holes || [])]
+                .map(ring => ring.map(v => L.latLng(v[0], v[1])));
             const polyline = L.polygon(polyLatLngs, {
                 color: label.color, fillColor: 'transparent',
                 fillOpacity: 0, weight: 2
@@ -517,7 +518,7 @@ function rebuildClassOverlay(className) {
                 Math.round((v[1] - gt.c) / gt.a),
                 Math.round((v[0] - gt.f) / gt.e)
             ]);
-            const polyMatches = rasterizePolygon(pixVerts);
+            const polyMatches = rasterizePolygon(pixVerts, polygonHolesToPixels(label, gt));
             label.pixelCount = polyMatches.length;
             if (polyMatches.length > 0) {
                 const polyCanvas = new window.DirectCanvasLayer(polyMatches, window.maps.rgb, color);
@@ -703,11 +704,19 @@ function markExportClean() {
     btn.title = '';
 }
 
-function addManualLabel(entry) {
+// Append a label without saving or re-rendering. Imports add all their labels
+// with this and then save and render once: doing both per label (addManualLabel)
+// rewrites the whole label store and list each time, which is quadratic in the
+// number of labels (minutes for a few thousand polygons).
+function pushManualLabel(entry) {
     manualLabelIdCounter++;
     entry.id = manualLabelIdCounter;
     entry.visible = true;
     manualLabels.push(entry);
+}
+
+function addManualLabel(entry) {
+    pushManualLabel(entry);
     saveManualLabelsToStorage();
     renderManualLabelsList();
     markExportDirty();
@@ -1080,7 +1089,7 @@ function computeManualClassification() {
             Math.round((v[1] - gt.c) / gt.a),
             Math.round((v[0] - gt.f) / gt.e)
         ]);
-        const matches = rasterizePolygon(pixVerts);
+        const matches = rasterizePolygon(pixVerts, polygonHolesToPixels(label, gt));
         for (const m of matches) {
             if (m.vectorIndex >= 0 && m.vectorIndex < N) {
                 assignments[m.vectorIndex] = classIdx;
@@ -1389,7 +1398,16 @@ function pointInPolygon(px, py, polygon) {
     return inside;
 }
 
-function rasterizePolygon(pixelVertices) {
+// Holes of a polygon label as pixel-space rings. Only imported polygons have
+// any; a polygon drawn in the viewer is a single ring.
+function polygonHolesToPixels(label, gt) {
+    return (label.holes || []).map(ring => ring.map(v => [
+        Math.round((v[1] - gt.c) / gt.a),
+        Math.round((v[0] - gt.f) / gt.e)
+    ]));
+}
+
+function rasterizePolygon(pixelVertices, holes = []) {
     if (!window.localVectors || !pixelVertices || pixelVertices.length < 3) return [];
 
     // Compute bounding box
@@ -1410,12 +1428,34 @@ function rasterizePolygon(pixelVertices) {
 
     const gt = window.localVectors.metadata.geotransform;
     const matches = [];
+    const rings = [pixelVertices, ...holes];
 
     for (let py = minPy; py <= maxPy; py++) {
+        // Test at pixel centre (px+0.5, py+0.5) so boundary-aligned
+        // polygons (e.g. from d3-contour export) rasterize correctly.
+        // Where the edges of all rings cross this row of pixel centres --
+        // the same ray-casting test as pointInPolygon, done once per row
+        // instead of once per pixel and ring.
+        const cy = py + 0.5;
+        const crossings = [];
+        for (const ring of rings) {
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0], yi = ring[i][1];
+                const xj = ring[j][0], yj = ring[j][1];
+                if ((yi > cy) !== (yj > cy)) {
+                    crossings.push((xj - xi) * (cy - yi) / (yj - yi) + xi);
+                }
+            }
+        }
+        crossings.sort((a, b) => a - b);
+
+        let passed = 0;
         for (let px = minPx; px <= maxPx; px++) {
-            // Test at pixel centre (px+0.5, py+0.5) so boundary-aligned
-            // polygons (e.g. from d3-contour export) rasterize correctly
-            if (pointInPolygon(px + 0.5, py + 0.5, pixelVertices)) {
+            // Even-odd over the outer ring and the holes: inside if an odd
+            // number of crossings lies to the right, so a hole is left out
+            // whichever way its ring is wound.
+            while (passed < crossings.length && !(px + 0.5 < crossings[passed])) passed++;
+            if ((crossings.length - passed) % 2 === 1) {
                 const gridIdx = window.gridLookupIndex(grid, px, py);
                 if (gridIdx >= 0) {
                     const lon = gt.c + px * gt.a;
@@ -1514,9 +1554,12 @@ function expandLabelToFeatures(label) {
 
     // Polygon label: export original polygon vertices
     if (label.type === 'polygon' && label.vertices) {
-        const ring = label.vertices.map(v => [v[1], v[0]]); // [lon, lat]
-        ring.push(ring[0]); // close
-        return [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: props }];
+        const rings = [label.vertices, ...(label.holes || [])].map(vertices => {
+            const ring = vertices.map(v => [v[1], v[0]]); // [lon, lat]
+            ring.push(ring[0]); // close
+            return ring;
+        });
+        return [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: props }];
     }
 
     // Fallback: single point at label centroid
@@ -1581,6 +1624,8 @@ async function doExportManualLabels(format) {
             viewport: window.currentViewportName,
             year: window.currentEmbeddingYear,
             embedding_version: window.localVectors?.metadata?.dataset_version || null,
+            // the grid that the labels' pixel_coords index into
+            geotransform: window.localVectors?.metadata?.geotransform || null,
             schema: window.activeSchemaMode,
             labels: manualLabels.map(l => ({
                 name: l.name,
@@ -1590,12 +1635,14 @@ async function doExportManualLabels(format) {
                 lat: l.lat,
                 lon: l.lon,
                 vertices: l.vertices || null,
+                holes: l.holes || null,
                 embedding: l.embedding || null,
                 embeddings: l.embeddings || null,
                 polygonMode: l.polygonMode || null,
                 threshold: l.threshold,
                 matchCount: l.matchCount,
-                pixelCount: l.pixelCount || null
+                pixelCount: l.pixelCount || null,
+                pixel_coords: l.pixel_coords || null
             }))
         };
         downloadFile(JSON.stringify(data, null, 2), `manual-labels-${window.currentViewportName || 'export'}.json`, 'application/json');
@@ -1722,6 +1769,27 @@ function downloadFile(content, filename, mimeType) {
     URL.revokeObjectURL(url);
 }
 
+// ESRI Shapefile stores outer rings clockwise and holes counter-clockwise, and
+// readers (GDAL, the `shapefile` library used by importShapefile) tell the two
+// apart by that winding alone. shp-write writes rings as given, and neither
+// d3-contour polygons (outer ring counter-clockwise in lon/lat) nor hand-drawn
+// ones are guaranteed to match, so orient them before writing.
+function orientRingsForShapefile(features) {
+    const isClockwise = (ring) => {
+        let area = 0;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+        }
+        return area < 0;
+    };
+    for (const f of features) {
+        if (!f.geometry || f.geometry.type !== 'Polygon') continue;
+        f.geometry.coordinates = f.geometry.coordinates.map((ring, i) =>
+            isClockwise(ring) === (i === 0) ? ring : ring.slice().reverse());
+    }
+    return features;
+}
+
 async function exportManualLabelsShapefile() {
     // Use shp-write for ESRI Shapefile export
     try {
@@ -1738,7 +1806,7 @@ async function exportManualLabelsShapefile() {
         }
 
         // Vectorize pixel labels into polygons for compact export
-        const features = manualExportFeatures();
+        const features = orientRingsForShapefile(manualExportFeatures());
 
         const gj = { type: 'FeatureCollection', features };
 
@@ -1771,7 +1839,7 @@ function importManualLabels(file) {
                     importGeoJSON(data);
                 } else if (data.labels && Array.isArray(data.labels)) {
                     // Full JSON import
-                    importLabelsJSON(data.labels);
+                    importLabelsJSON(data.labels, data.geotransform);
                 } else if (Array.isArray(data)) {
                     // Array of labels (anonymous or located)
                     importLabelsJSON(data);
@@ -1884,6 +1952,27 @@ function _geoJsonLabelName(props) {
     return (raw !== undefined && raw !== null && raw !== '') ? String(raw) : 'Imported';
 }
 
+// The polygons of a Polygon / MultiPolygon geometry, each as [outer ring,
+// ...holes]. A MultiPolygon's rings are regrouped by nesting depth (even =
+// outer ring, odd = hole of the ring around it) instead of being taken as
+// grouped: the `shapefile` reader returns the rings of a polygon written with
+// the wrong winding (TEE's own exports before orientRingsForShapefile) as
+// separate polygons, and with the right winding it still splits off holes of
+// pixel-aligned polygons (its point-on-segment test matches too often there).
+function _polygonParts(geom) {
+    if (geom.type === 'Polygon') return [geom.coordinates];
+    const rings = geom.coordinates.flat();
+    const within = rings.map(r => rings.map(s => s !== r && pointInPolygon(r[0][0], r[0][1], s)));
+    const depth = within.map(row => row.filter(Boolean).length);
+    const parts = rings.map((r, i) => depth[i] % 2 === 0 ? [r] : null);
+    rings.forEach((r, i) => {
+        if (depth[i] % 2 === 0) return;
+        const outer = rings.findIndex((s, j) => within[i][j] && depth[j] === depth[i] - 1);
+        if (outer >= 0) parts[outer].push(r);
+    });
+    return parts.filter(Boolean);
+}
+
 function importGeoJSON(geojson) {
     const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
     const grid = window.localVectors ? window.localVectors.gridLookup : null;
@@ -1909,8 +1998,9 @@ function importGeoJSON(geojson) {
             }
             const [lon, lat] = geom.coordinates;
             pointGroups.get(name).points.push({ lon, lat });
-        } else if (geom.type === 'Polygon') {
-            polygonFeatures.push({ props, geom });
+        } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+            // One label per polygon of a MultiPolygon
+            for (const rings of _polygonParts(geom)) polygonFeatures.push({ props, rings });
         }
     }
 
@@ -1944,18 +2034,17 @@ function importGeoJSON(geojson) {
                 const emb = window.localExtract(lat, lon);
                 if (emb) entry.embedding = Array.from(emb);
             }
-            addManualLabel(entry);
+            pushManualLabel(entry);
             count++;
         }
     }
 
     // Import polygon features (unchanged)
-    for (const { props, geom } of polygonFeatures) {
+    for (const { props, rings } of polygonFeatures) {
         const name = _geoJsonLabelName(props);
         const color = props.color || window.SEG_PALETTE[colorIdx % window.SEG_PALETTE.length];
         colorIdx++;
-        const ring = geom.coordinates[0];
-        const geoVertices = ring.slice(0, -1).map(c => [c[1], c[0]]); // [lat, lon]
+        const [geoVertices, ...holes] = rings.map(ring => ring.slice(0, -1).map(c => [c[1], c[0]])); // [lat, lon]
         const entry = {
             name, color, code: props.code || null, type: 'polygon',
             lat: geoVertices.reduce((s, v) => s + v[0], 0) / geoVertices.length,
@@ -1963,10 +2052,11 @@ function importGeoJSON(geojson) {
             vertices: geoVertices,
             embedding: null, threshold: 0, matchCount: 0, pixelCount: 0
         };
-        addManualLabel(entry);
+        if (holes.length > 0) entry.holes = holes;
+        pushManualLabel(entry);
         if (gt && grid) {
             const pixVerts = geoVertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
-            const matches = rasterizePolygon(pixVerts);
+            const matches = rasterizePolygon(pixVerts, polygonHolesToPixels(entry, gt));
             const lbl = manualLabels[manualLabels.length - 1];
             lbl.matchCount = matches.length;
             lbl.pixelCount = matches.length;
@@ -1988,10 +2078,16 @@ function importGeoJSON(geojson) {
     saveManualLabelsToStorage();
     rebuildManualOverlays();
     renderManualLabelsList();
+    if (count > 0) markExportDirty();
     console.log(`[IMPORT] Imported ${count} labels (${geojson.features.length} features) from GeoJSON`);
 }
 
-function importLabelsJSON(labels) {
+function importLabelsJSON(labels, geotransform) {
+    // pixel_coords (the exact pixels of a promoted auto-label cluster) index
+    // into the grid they were exported from: restore them only on that same
+    // grid. Anywhere else the label falls back to its embedding + threshold.
+    const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
+    const sameGrid = !!gt && !!geotransform && ['a', 'c', 'e', 'f'].every(k => gt[k] === geotransform[k]);
     let count = 0;
     for (const l of labels) {
         const entry = {
@@ -2007,10 +2103,17 @@ function importLabelsJSON(labels) {
             matchCount: l.matchCount || 0,
             pixelCount: l.pixelCount || null
         };
-        addManualLabel(entry);
+        if (l.holes) entry.holes = l.holes;
+        if (sameGrid && l.pixel_coords) entry.pixel_coords = l.pixel_coords;
+        pushManualLabel(entry);
         count++;
     }
+    if (count > 0) {
+        saveManualLabelsToStorage();
+        markExportDirty();
+    }
     rebuildManualOverlays();
+    renderManualLabelsList();
     console.log(`[IMPORT] Imported ${count} labels from JSON`);
 }
 
@@ -2037,19 +2140,27 @@ async function importShapefile(arrayBuffer) {
         }
 
         const zip = await JSZip.loadAsync(arrayBuffer);
-        const shpName = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.shp'));
-        const dbfName = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.dbf'));
-        if (!shpName) throw new Error('No .shp file found in zip');
+        // Read every layer: shp-write (our own export) writes one per geometry
+        // type (POINT.shp, POLYGON.shp), so taking only the first .shp dropped
+        // all polygons of an export that also had a pin. Skip the "._*" copies
+        // macOS adds to a zip.
+        const names = Object.keys(zip.files).filter(n => !n.split('/').pop().startsWith('.'));
+        const shpNames = names.filter(n => n.toLowerCase().endsWith('.shp'));
+        if (shpNames.length === 0) throw new Error('No .shp file found in zip');
 
-        const shpBuf = await zip.files[shpName].async('arraybuffer');
-        const dbfBuf = dbfName ? await zip.files[dbfName].async('arraybuffer') : undefined;
-
-        const source = await shapefile.open(shpBuf, dbfBuf);
         const features = [];
-        let result = await source.read();
-        while (!result.done) {
-            features.push(result.value);
-            result = await source.read();
+        for (const shpName of shpNames) {
+            const dbfPath = shpName.slice(0, -4).toLowerCase() + '.dbf';
+            const dbfName = names.find(n => n.toLowerCase() === dbfPath);
+            const shpBuf = await zip.files[shpName].async('arraybuffer');
+            const dbfBuf = dbfName ? await zip.files[dbfName].async('arraybuffer') : undefined;
+
+            const source = await shapefile.open(shpBuf, dbfBuf);
+            let result = await source.read();
+            while (!result.done) {
+                features.push(result.value);
+                result = await source.read();
+            }
         }
         importGeoJSON({ type: 'FeatureCollection', features });
     } catch (e) {
@@ -3359,7 +3470,7 @@ async function buildShapefileZip() {
         }
     }
 
-    const gj = { type: 'FeatureCollection', features };
+    const gj = { type: 'FeatureCollection', features: orientRingsForShapefile(features) };
 
     if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
         return await shpwrite.zip(gj, {outputType: 'blob'});

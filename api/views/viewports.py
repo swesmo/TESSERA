@@ -29,6 +29,7 @@ from api.helpers import (
     estimate_viewport_size,
     cleanup_viewport_embeddings,
     check_viewport_owner,
+    check_viewport_read,
     parse_json_body,
     parse_vq_request,
     get_viewport_vq_config,
@@ -174,6 +175,9 @@ def viewport_info(request, viewport_name):
         validate_viewport_name(viewport_name)
     except ValueError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    allowed, deny_response = check_viewport_read(request, viewport_name)
+    if not allowed:
+        return deny_response
     try:
         viewport = read_viewport_file(viewport_name)
         viewport['name'] = viewport_name
@@ -334,10 +338,10 @@ def create_viewport(request):
         # Validate years
         years = data.get('years')
         if years:
-            valid_range = range(2017, 2026)
+            valid_range = range(MIN_YEAR, MAX_YEAR + 1)
             invalid = [y for y in years if y not in valid_range]
             if invalid:
-                return JsonResponse({'success': False, 'error': f'Years out of range (2017-2025): {invalid}'}, status=400)
+                return JsonResponse({'success': False, 'error': f'Years out of range ({MIN_YEAR}-{MAX_YEAR}): {invalid}'}, status=400)
 
             # Note: GeoTessera availability is NOT checked here (would block for 28s
             # downloading the registry). The pipeline reports unavailable years as errors.
@@ -636,6 +640,22 @@ def add_years(request, viewport_name):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+_coverage_client = None  # shared embeddings reader, opened on first use
+
+
+def _zarr_year_coverage(bbox):
+    """{year: tiles} for the embeddings dataset TEE reads (v1.1-dclimate):
+    how many 0.1-degree tiles in *bbox* overlap a block the dataset embedded
+    that year, 0 for a year with no data. One tile-registry lookup (cached on
+    disk after the first query for an area) -- no embedding reads."""
+    from tessera_eval.dataset import make_client, year_coverage
+
+    global _coverage_client
+    if _coverage_client is None:
+        _coverage_client = make_client()
+    return year_coverage(_coverage_client, bbox, years=range(MIN_YEAR, MAX_YEAR + 1))
+
+
 def embedding_coverage(request):
     """Check which years have GeoTessera embedding coverage for a bbox."""
     try:
@@ -648,12 +668,7 @@ def embedding_coverage(request):
         return JsonResponse({'error': 'bbox is required as [minLon, minLat, maxLon, maxLat]'}, status=400)
 
     try:
-        from geotessera import GeoTessera
-        gt = GeoTessera()
-        coverage = {}
-        for year in range(2018, 2026):
-            tiles = gt.registry.load_blocks_for_region(tuple(bbox), year)
-            coverage[str(year)] = len(tiles)
+        coverage = _zarr_year_coverage(tuple(float(v) for v in bbox))
         return JsonResponse({'coverage': coverage})
     except Exception as e:
         logger.error(f"Error checking embedding coverage: {e}")
