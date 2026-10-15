@@ -1,0 +1,74 @@
+{
+  "alpha": 2.5,
+  "sample_size": 5000,
+  "seeds": [
+    42,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "results": {
+    "austria": {
+      "median_connectivity_nn": 5.0,
+      "alpha": 2.5,
+      "adaptive_nn": 13,
+      "ari_mean": 0.31417275619643903,
+      "ari_std": 0.032168919468470766,
+      "ami_mean": 0.4286112173393676,
+      "ami_std": 0.0053867565590967545,
+      "stability_mean": 0.7336899386015918,
+      "stability_std": 0.09794481947930193,
+      "stability_min": 0.5615021093459892,
+      "runtime_mean_s": 1.2977269432914909,
+      "largest_cluster_mean": 0.14342814288095104
+    },
+    "west": {
+      "median_connectivity_nn": 6.0,
+      "alpha": 2.5,
+      "adaptive_nn": 15,
+      "ari_mean": 0.25487407618910746,
+      "ari_std": 0.015479230686473928,
+      "ami_mean": 0.4184840604416845,
+      "ami_std": 0.008144711077964524,
+      "stability_mean": 0.7004412514327617,
+      "stability_std": 0.07693290563828725,
+      "stability_min": 0.5515279561337202,
+      "runtime_mean_s": 0.8147211218893062,
+      "largest_cluster_mean": 0.14774804177545692
+    },
+    "east": {
+      "median_connectivity_nn": 5.5,
+      "alpha": 2.5,
+      "adaptive_nn": 14,
+      "ari_mean": 0.3723006439462777,
+      "ari_std": 0.0474622851057059,
+      "ami_mean": 0.4452920586378287,
+      "ami_std": 0.012481120722311959,
+      "stability_mean": 0.6445853672112425,
+      "stability_std": 0.09332750739169872,
+      "stability_min": 0.4750350464527832,
+      "runtime_mean_s": 0.8687110276950989,
+      "largest_cluster_mean": 0.1725360165176009
+    },
+    "gothenburg": {
+      "median_connectivity_nn": 23.0,
+      "alpha": 2.5,
+      "adaptive_nn": 58,
+      "ari_mean": 0.43340989681449554,
+      "ari_std": 0.004588875519242193,
+      "ami_mean": 0.48181037222222606,
+      "ami_std": 0.0028267101391488427,
+      "stability_mean": 0.9452521900899009,
+      "stability_std": 0.017726335262903098,
+      "stability_min": 0.9038051075552266,
+      "runtime_mean_s": 1.315270264603896,
+      "largest_cluster_mean": 0.3947401353430505
+    }
+  }
+}

@@ -1,0 +1,258 @@
+{
+  "sample_size": 5000,
+  "max_nn": 120,
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ],
+  "results": {
+    "austria": {
+      "N": 864048,
+      "sample_size": 5000,
+      "per_seed": [
+        {
+          "seed": 1001,
+          "minimum_connected_nn": 7,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1002,
+          "minimum_connected_nn": 10,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1003,
+          "minimum_connected_nn": 9,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1004,
+          "minimum_connected_nn": 8,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1005,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1006,
+          "minimum_connected_nn": 9,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1007,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1008,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1009,
+          "minimum_connected_nn": 7,
+          "components_at_previous_nn": 3
+        },
+        {
+          "seed": 1010,
+          "minimum_connected_nn": 8,
+          "components_at_previous_nn": 2
+        }
+      ],
+      "mean": 7.5,
+      "median": 7.5,
+      "min": 5,
+      "max": 10
+    },
+    "west": {
+      "N": 432024,
+      "sample_size": 5000,
+      "per_seed": [
+        {
+          "seed": 1001,
+          "minimum_connected_nn": 7,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1002,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1003,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 7
+        },
+        {
+          "seed": 1004,
+          "minimum_connected_nn": 9,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1005,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1006,
+          "minimum_connected_nn": 7,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1007,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1008,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1009,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1010,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 4
+        }
+      ],
+      "mean": 6.2,
+      "median": 6.0,
+      "min": 5,
+      "max": 9
+    },
+    "east": {
+      "N": 432024,
+      "sample_size": 5000,
+      "per_seed": [
+        {
+          "seed": 1001,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1002,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 3
+        },
+        {
+          "seed": 1003,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 5
+        },
+        {
+          "seed": 1004,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1005,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1006,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1007,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1008,
+          "minimum_connected_nn": 5,
+          "components_at_previous_nn": 3
+        },
+        {
+          "seed": 1009,
+          "minimum_connected_nn": 4,
+          "components_at_previous_nn": 6
+        },
+        {
+          "seed": 1010,
+          "minimum_connected_nn": 6,
+          "components_at_previous_nn": 2
+        }
+      ],
+      "mean": 5.4,
+      "median": 5.5,
+      "min": 4,
+      "max": 6
+    },
+    "gothenburg": {
+      "N": 233333,
+      "sample_size": 5000,
+      "per_seed": [
+        {
+          "seed": 1001,
+          "minimum_connected_nn": 21,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1002,
+          "minimum_connected_nn": 22,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1003,
+          "minimum_connected_nn": 19,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1004,
+          "minimum_connected_nn": 27,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1005,
+          "minimum_connected_nn": 21,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1006,
+          "minimum_connected_nn": 22,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1007,
+          "minimum_connected_nn": 20,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1008,
+          "minimum_connected_nn": 21,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1009,
+          "minimum_connected_nn": 26,
+          "components_at_previous_nn": 2
+        },
+        {
+          "seed": 1010,
+          "minimum_connected_nn": 16,
+          "components_at_previous_nn": 2
+        }
+      ],
+      "mean": 21.5,
+      "median": 21.0,
+      "min": 16,
+      "max": 27
+    }
+  }
+}

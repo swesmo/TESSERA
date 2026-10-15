@@ -1,0 +1,68 @@
+{
+  "selection_rule": "nn = ceil(2.5 * median n99); n99 calibrated using seeds 1001--1010",
+  "sample_size": 5000,
+  "fixed_nn": {
+    "austria": 8,
+    "west": 10,
+    "east": 10,
+    "gothenburg": 45
+  },
+  "evaluation_seeds": [
+    42,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "results": {
+    "austria": {
+      "nn": 8,
+      "ari_mean": 0.3342607159384837,
+      "ari_std": 0.016635939672787866,
+      "ami_mean": 0.4281101508236268,
+      "ami_std": 0.004068732638685188,
+      "stability_mean": 0.7289313162293902,
+      "stability_std": 0.0547716891238054,
+      "stability_min": 0.6364485655411692,
+      "runtime_mean_s": 1.187464546004776
+    },
+    "west": {
+      "nn": 10,
+      "ari_mean": 0.29823450432975585,
+      "ari_std": 0.04089598306988289,
+      "ami_mean": 0.41567194144943037,
+      "ami_std": 0.00862281934756223,
+      "stability_mean": 0.7055994147608762,
+      "stability_std": 0.08875955263077688,
+      "stability_min": 0.565832504071483,
+      "runtime_mean_s": 0.9323598888004199
+    },
+    "east": {
+      "nn": 10,
+      "ari_mean": 0.39864038043592764,
+      "ari_std": 0.08282064568084582,
+      "ami_mean": 0.4429534895561427,
+      "ami_std": 0.009112384997161127,
+      "stability_mean": 0.6370369826267313,
+      "stability_std": 0.08284152214864297,
+      "stability_min": 0.48846578500497173,
+      "runtime_mean_s": 0.9137773811176885
+    },
+    "gothenburg": {
+      "nn": 45,
+      "ari_mean": 0.4216998430827895,
+      "ari_std": 0.014461852562142807,
+      "ami_mean": 0.47409749510347654,
+      "ami_std": 0.009537640790916761,
+      "stability_mean": 0.9206060471830445,
+      "stability_std": 0.031240569600895555,
+      "stability_min": 0.8531559261700518,
+      "runtime_mean_s": 1.1268585508049
+    }
+  }
+}
