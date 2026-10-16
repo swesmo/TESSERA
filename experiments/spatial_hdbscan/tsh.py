@@ -108,6 +108,7 @@ def tee_kmeans(X, k, seed, sample=None, max_iter=20, n_init=1):
     sample (<=20 it, stop <0.5 % changes), one assignment pass over all N. numpy RNG instead of
     mulberry32. Returns centroids (k, D)."""
     rng = np.random.default_rng(seed)
+    print("seed:", seed)
     N = len(X)
     S = min(sample or max(5000, 500 * k), N)
     Xs = X[rng.choice(N, S, replace=False)].astype(np.float32)
