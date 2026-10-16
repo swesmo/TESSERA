@@ -18,13 +18,15 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, normalized_mutual_info_score
 from sklearn.neighbors import KNeighborsClassifier
 
+gothenburg_path = Path.home() / "data/vectors/Gothenburg/2024"
+china1_path = Path.home() / "data/vectors/china1/2024"
 HOME = Path.home()
-TILES = HOME / "tee_data/compute-cache/tessera-eval/tiles"
-CACHE = HOME / "tee_data/harness-cache"
+TILES = HOME / "data/compute-cache/tessera-eval/tiles"
+CACHE = HOME / "data/harness-cache"
 CACHE.mkdir(exist_ok=True)
 ROOT = Path(__file__).resolve().parents[2]  # repo root
-AUSTRIA_ZIP = ROOT / "austria.zip"
-
+#AUSTRIA_ZIP = ROOT / "austria.zip"
+AUSTRIA_ZIP = "/home/esmo/Documents/chalmers-courses/DAT300-cyberphysical-systems/TESSERA/austria.zip"
 
 # ───────────────────────── data ─────────────────────────
 
@@ -39,6 +41,20 @@ def gothenburg():
     return dict(name="Gothenburg 2024", emb=G, valid=np.ones(G.shape[:2], bool),
                 px_m=(13.0, 6.95))  # (row, col) pixel size in metres
 
+def custom(custom_name, year): #, year, custom_name):
+    path_str = "data/vectors/" + custom_name + "/" + str(year)
+    custom_path = Path.home() / path_str
+    cache_name = custom_name + str(year) + "_emb.npy"
+    print("cache_name: ", cache_name, " path: ", custom_path)
+    f = CACHE / cache_name #"custom2024_emb.npy"
+    if not f.exists():
+        sys.path.insert(0, str(ROOT / "experiments/seed_instability"))
+        from make_seed_maps import load_custom_embeddings  # faithful RVQ decode as in TEE
+        emb, H, W = load_custom_embeddings(custom_path, year)
+        np.save(f, emb.reshape(H, W, -1))
+    G = np.load(f)
+    return dict(name=custom_name, emb=G, valid=np.ones(G.shape[:2], bool),
+                px_m=(13.0, 6.95))  # (row, col) pixel size in metres
 
 def _austria_labels(transform, shape):
     import geopandas as gpd, zipfile, csv, io
@@ -293,6 +309,14 @@ def adjacency(lab, valid, K):
     return A + A.T
 
 
+def percentage_difference(list):
+    diff = []
+    for i in range(1, len(list)-1):
+        diff.append(round(list[i] / list[i - 1], 2))
+    return diff
+
+    
+
 def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
     """Greedy agglomerative merge of K0 centroids C (K0, D) with pixel counts n down to k groups.
     ward:    cost(a,b) = n_a n_b / (n_a + n_b) * ||mu_a - mu_b||^2  (increase in inertia)
@@ -307,6 +331,8 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
     A = None if A is None else A.astype(np.float64).copy()
     D0 = ((C[:, None, :].astype(np.float64) - C[None]) ** 2).sum(-1)
 
+    test_Cm_min_list = []
+
     def cost(a, b):
         if method == "average":
             return np.sqrt(D0[np.ix_(groups[a], groups[b])]).mean()
@@ -315,8 +341,9 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
             P = A.sum(1)
             s = A[a, b] / np.sqrt(max(P[a] * P[b], 1e-9))
             c /= 1 + gamma * s
+        #print("the cost is: ", c)
         return c
-
+    #print("-------------------------------------------------")
     while len(groups) > k:
         keys = list(groups)
         if method == "ward":  # vectorised over all active pairs
@@ -327,8 +354,14 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
                 P = A.sum(1)[ki]
                 Cm = Cm / (1 + gamma * A[np.ix_(ki, ki)] / np.sqrt(np.maximum(P[:, None] * P[None], 1e-9)))
             np.fill_diagonal(Cm, np.inf)
+            test_var = Cm.min()
+            #print("Cm.min(): ", test_var)
             i, j = np.unravel_index(Cm.argmin(), Cm.shape)
             a, b = int(ki[min(i, j)]), int(ki[max(i, j)])
+            #print("Cost i?: ", i, "Cost j?", j)
+            #print("Cost a?: ", a, "Cost b?", b, "   k:", len(groups))
+            #print("Cm of remaining clusters: ", [x.min() for x in Cm])
+            test_Cm_min_list.append(float(test_var))
         else:
             best = min(((cost(a, b), a, b) for i, a in enumerate(keys) for b in keys[i + 1:]))
             _, a, b = best
@@ -341,4 +374,31 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
     lut = np.empty(K0, int)
     for g, (_, members) in enumerate(sorted(groups.items())):
         lut[members] = g
+
+    print("The different Cm_min:", test_Cm_min_list)
+    print(percentage_difference(test_Cm_min_list))
     return lut
+
+def evaluate_final_clusters(C, n, k, method="ward", A=None, gamma=0.0):
+    K0 = len(C)
+    mu = C.astype(np.float64).copy()
+    cnt = n.astype(np.float64).copy()
+    groups = {i: [i] for i in range(K0)}
+    A = None if A is None else A.astype(np.float64).copy()
+    D0 = ((C[:, None, :].astype(np.float64) - C[None]) ** 2).sum(-1)
+
+    keys = list(groups)
+    ki = np.array(keys)
+    m, c = mu[ki], cnt[ki]
+    Cm = c[:, None] * c[None] / (c[:, None] + c[None]) * ((m[:, None] - m[None]) ** 2).sum(-1)
+    if gamma and A is not None:
+        P = A.sum(1)[ki]
+        Cm = Cm / (1 + gamma * A[np.ix_(ki, ki)] / np.sqrt(np.maximum(P[:, None] * P[None], 1e-9)))
+    np.fill_diagonal(Cm, np.inf)
+    test_var = Cm.min()
+    print("Cm.min(): ", test_var)
+    i, j = np.unravel_index(Cm.argmin(), Cm.shape)
+    a, b = int(ki[min(i, j)]), int(ki[max(i, j)])
+    print("Cost i?: ", i, "Cost j?", j)
+    print("Cost a?: ", a, "Cost b?", b, "   k:", len(groups))
+    print("Cm of remaining clusters: ", [x.min() for x in Cm])

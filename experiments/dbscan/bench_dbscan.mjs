@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const H = 385, W = 720, DIM = 128, N = H * W;
-const buf = fs.readFileSync(path.join(os.homedir(), 'tee_data/harness-cache/gbg.f32'));
+const buf = fs.readFileSync(path.join(os.homedir(), 'data/harness-cache/gbg.f32'));
 const emb = new Float32Array(buf.buffer, buf.byteOffset, N * DIM);
 const P = JSON.parse(fs.readFileSync(path.join(HERE, 'results/js_params.json'), 'utf8'));
 const now = () => performance.now();

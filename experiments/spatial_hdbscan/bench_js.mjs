@@ -12,7 +12,7 @@ const SEG = path.join(HERE, '../../public/js/segmentation.js');
 const H = 385, W = 720, DIM = 128, N = H * W;
 const PX = [13.0, 6.95]; // metres per pixel (row, col) in TEE's EPSG:4326 grid at 57.7 N
 
-const buf = fs.readFileSync(path.join(os.homedir(), 'tee_data/harness-cache/gbg.f32'));
+const buf = fs.readFileSync(path.join(os.homedir(), 'data/harness-cache/gbg.f32'));
 const emb = new Float32Array(buf.buffer, buf.byteOffset, N * DIM);
 
 const t = (f) => { const s = performance.now(); const r = f(); return [performance.now() - s, r]; };

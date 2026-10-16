@@ -9,8 +9,11 @@ from run_experiments import OUT
 which = sys.argv[1] if len(sys.argv) > 1 else "gbg"
 n_seeds = int(sys.argv[2]) if len(sys.argv) > 2 else 10
 YEAR = int(os.environ.get("YEAR", 2024))
-ds = tsh.gothenburg() if which == "gbg" else tsh.austria(year=YEAR)
-k = 5 if which == "gbg" else 17
+# ds = tsh.gothenburg() if which == "gbg" else tsh.austria(year=YEAR)
+#ds = tsh.custom("", 2024, "china1") if which == "gbg" else tsh.austria(year=YEAR)
+ds = tsh.gothenburg() if which == "gbg" else tsh.custom(which, 2024)
+k = 1
+#k = 1 if which == "gbg" else 17
 E, V, px = ds["emb"], ds["valid"], ds["px_m"]
 H, W, _ = E.shape
 X = E[V]
@@ -62,24 +65,24 @@ def kmeans(Xin, s, n_init):
 
 
 M = {
-    "kmeans (TEE)": lambda s: kmeans(X, s, 1),
-    "kmeans n_init=10": lambda s: kmeans(X, s, 10),
+#    "kmeans (TEE)": lambda s: kmeans(X, s, 1),
+#    "kmeans n_init=10": lambda s: kmeans(X, s, 10),
     "over K0=32 + Ward": lambda s: overmerge(X, s, 32),
-    "over K0=64 + Ward": lambda s: overmerge(X, s, 64),
-    "over K0=128 + Ward": lambda s: overmerge(X, s, 128),
-    "over K0=64 + average link": lambda s: overmerge(X, s, 64, "average"),
-    "over K0=64 + spatial Ward g=1": lambda s: overmerge(X, s, 64, gamma=1.0),
-    "over K0=64 + spatial Ward g=4": lambda s: overmerge(X, s, 64, gamma=4.0),
-    "over K0=64 + Ward, sample 10k": lambda s: overmerge(X, s, 64, sample=10_000),
-    "over K0=64 + Ward, n_init=3": lambda s: overmerge(X, s, 64, n_init=3),
-    "over K0=32 + Ward + refine": lambda s: refine(X, s, 32),
-    "over K0=64 + Ward + refine": lambda s: refine(X, s, 64),
-    "over K0=32 + Ward + refine, sample 10k": lambda s: refine(X, s, 32, sample=10_000),
-    "over K0=32 + Ward + refine + MRF 0.25": lambda s: refine(X, s, 32, sample=10_000, beta=0.25),
-    "over K0=32 + Ward + refine + MRF 0.5": lambda s: refine(X, s, 32, sample=10_000, beta=0.5),
-    "Gauss 10m + kmeans n_init=10": lambda s: kmeans(Xg, s, 10),
-    "Gauss 10m + over K0=64 + Ward": lambda s: overmerge(Xg, s, 64),
-    "Gauss 10m + over K0=32 + Ward + refine": lambda s: refine(Xg, s, 32, sample=10_000),
+    #"over K0=64 + Ward": lambda s: overmerge(X, s, 64),
+    #"over K0=128 + Ward": lambda s: overmerge(X, s, 128),
+    # "over K0=64 + average link": lambda s: overmerge(X, s, 64, "average"),
+    # "over K0=64 + spatial Ward g=1": lambda s: overmerge(X, s, 64, gamma=1.0),
+    # "over K0=64 + spatial Ward g=4": lambda s: overmerge(X, s, 64, gamma=4.0),
+    # "over K0=64 + Ward, sample 10k": lambda s: overmerge(X, s, 64, sample=10_000),
+    # "over K0=64 + Ward, n_init=3": lambda s: overmerge(X, s, 64, n_init=3),
+    # "over K0=32 + Ward + refine": lambda s: refine(X, s, 32),
+    # "over K0=64 + Ward + refine": lambda s: refine(X, s, 64),
+    # "over K0=32 + Ward + refine, sample 10k": lambda s: refine(X, s, 32, sample=10_000),
+    # "over K0=32 + Ward + refine + MRF 0.25": lambda s: refine(X, s, 32, sample=10_000, beta=0.25),
+    # "over K0=32 + Ward + refine + MRF 0.5": lambda s: refine(X, s, 32, sample=10_000, beta=0.5),
+    # "Gauss 10m + kmeans n_init=10": lambda s: kmeans(Xg, s, 10),
+    # "Gauss 10m + over K0=64 + Ward": lambda s: overmerge(Xg, s, 64),
+#    "Gauss 10m + over K0=32 + Ward + refine": lambda s: refine(Xg, s, 32, sample=10_000),
 }
 
 
@@ -89,6 +92,7 @@ def inertia(l):
     for c in np.unique(l):
         Z = X[l == c].astype(np.float64)
         tot += ((Z - Z.mean(0)) ** 2).sum()
+    #print("the ineria of ", l, " is: ", tot/len(l))
     return tot / len(l)
 
 

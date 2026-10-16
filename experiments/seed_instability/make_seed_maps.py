@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-VP = Path.home() / "tee_data/vectors/Gteborg/2024"
+VP = Path.home() / "data/vectors/Gothenburg/2024"
 OUT = Path(__file__).resolve().parent
 K = 5
 M32 = 0xFFFFFFFF
@@ -29,6 +29,9 @@ def load_npy(name):
     with gzip.open(VP / name, "rb") as f:
         return np.load(io.BytesIO(f.read()))
 
+def load_custom_npy(custom_path, name):
+    with gzip.open(custom_path / name, "rb") as f:
+            return np.load(io.BytesIO(f.read()))
 
 def mulberry32(seed):
     a = seed & M32
@@ -42,6 +45,41 @@ def mulberry32(seed):
 
     return rand
 
+def load_custom_embeddings(custom_path: Path, year):
+    """RVQ codebooks + indices -> uint8 mosaic -> dequantised float32, as TEE does it."""
+    meta = json.loads((custom_path / "vq_metadata.json").read_text())
+    print("custom path in load_custom_embeddings: ", custom_path)
+    #print(meta)
+    t, H, W = meta["tile_size"], *meta["output_shape"]
+    nR, nC = meta["n_tile_rows"], meta["n_tile_cols"]
+    top, left = meta.get("crop_offset", [0, 0])
+    fullH, fullW = meta.get("mosaic_shape", meta["output_shape"])
+
+    def decode(u8, sc):
+        mn, mx = sc[:, :, 0].astype(np.float64), sc[:, :, 1].astype(np.float64)
+        span = mx - mn
+        span[span == 0] = 1.0
+        return (mn[:, None, :] + (u8 / 255.0) * span[:, None, :]).astype(np.float32)
+
+    cb1 = decode(load_custom_npy(custom_path, "codebooks1_uint8.npy.gz"), load_npy("codebooks1_scales.npy.gz"))
+    cb2 = decode(load_custom_npy(custom_path, "codebooks2_uint8.npy.gz"), load_npy("codebooks2_scales.npy.gz"))
+    idx1 = load_custom_npy(custom_path, "indices1.npy.gz").reshape(-1)[: H * W]
+    idx2 = load_custom_npy(custom_path, "indices2.npy.gz").reshape(-1)[: H * W]
+    # print(idx1)
+    #print(cb1)
+
+    def tile_of(p, n, full):
+        return np.where(p >= full - t, n - 1, p // t)
+
+    ly, lx = np.meshgrid(np.arange(H), np.arange(W), indexing="ij")
+    tile = (tile_of(top + ly, nR, fullH) * nC + tile_of(left + lx, nC, fullW)).reshape(-1)
+    v = (cb1[tile, idx1].astype(np.float64) + cb2[tile, idx2]).astype(np.float32)
+    dmin, dmax = v.min(0), v.max(0)
+    dscale = (dmax.astype(np.float64) - dmin).astype(np.float32)
+    dscale[dscale == 0] = 1
+    q = np.clip(np.floor((v.astype(np.float64) - dmin) / dscale * 255 + 0.5), 0, 255)
+    scale = ((dmax.astype(np.float64) - dmin) / 255).astype(np.float32)
+    return (q * scale + dmin).astype(np.float32), H, W
 
 def load_embeddings():
     """RVQ codebooks + indices -> uint8 mosaic -> dequantised float32, as TEE does it."""
