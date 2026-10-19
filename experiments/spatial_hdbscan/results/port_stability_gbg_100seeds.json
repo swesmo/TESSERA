@@ -1,0 +1,41 @@
+{
+ "dataset": "Gothenburg 2024, k=5, TEE worker code (JavaScript), seeds 1-100",
+ "methods": {
+  "kmeans": {
+   "ari_mean": 0.6662266548712533,
+   "ari_ci": [
+    0.63,
+    0.702
+   ],
+   "ari_min": 0.2699167903891517,
+   "differ_mean": 0.21593333697727637,
+   "differ_median": 0.23298701298701296,
+   "differ_max": 0.5693867243867243,
+   "share_pairs_over_10pct": 0.7282828282828283
+  },
+  "stable": {
+   "ari_mean": 0.9531565633082886,
+   "ari_ci": [
+    0.942,
+    0.962
+   ],
+   "ari_min": 0.6844364473783594,
+   "differ_mean": 0.017977083242234758,
+   "differ_median": 0.014480519480519483,
+   "differ_max": 0.1401875901875902,
+   "share_pairs_over_10pct": 0.017373737373737375
+  },
+  "smooth": {
+   "ari_mean": 0.9496818211891257,
+   "ari_ci": [
+    0.939,
+    0.958
+   ],
+   "ari_min": 0.6865446203796499,
+   "differ_mean": 0.019061388050781992,
+   "differ_median": 0.015768398268398265,
+   "differ_max": 0.13394300144300142,
+   "share_pairs_over_10pct": 0.014545454545454545
+  }
+ }
+}

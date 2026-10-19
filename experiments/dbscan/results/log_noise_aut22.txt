@@ -1,0 +1,8 @@
+DBSCAN pca8 q=0.5          noise=0.301 edges=0.444 interior=0.127 het-quartiles=[0.048, 0.141, 0.37, 0.644] zones={'field interior': 0.193, 'field edge': 0.461, 'outside fields': 0.318}
+DBSCAN pca8 q=0.75         noise=0.083 edges=0.126 interior=0.031 het-quartiles=[0.013, 0.027, 0.075, 0.217] zones={'field interior': 0.052, 'field edge': 0.128, 'outside fields': 0.088}
+DBSCAN pca16 q=0.5         noise=0.244 edges=0.368 interior=0.094 het-quartiles=[0.043, 0.097, 0.283, 0.554] zones={'field interior': 0.154, 'field edge': 0.389, 'outside fields': 0.255}
+DBSCAN pca16 q=0.75        noise=0.048 edges=0.071 interior=0.021 het-quartiles=[0.014, 0.02, 0.043, 0.116] zones={'field interior': 0.032, 'field edge': 0.072, 'outside fields': 0.051}
+DBSCAN pca32 q=0.5         noise=0.177 edges=0.252 interior=0.086 het-quartiles=[0.031, 0.058, 0.176, 0.441] zones={'field interior': 0.085, 'field edge': 0.214, 'outside fields': 0.226}
+DBSCAN pca32 q=0.75        noise=0.031 edges=0.039 interior=0.022 het-quartiles=[0.006, 0.012, 0.028, 0.078] zones={'field interior': 0.013, 'field edge': 0.027, 'outside fields': 0.045}
+DBSCAN raw128 q=0.5        noise=0.089 edges=0.104 interior=0.071 het-quartiles=[0.029, 0.038, 0.077, 0.212] zones={'field interior': 0.04, 'field edge': 0.065, 'outside fields': 0.131}
+DBSCAN raw128 q=0.75       noise=0.021 edges=0.016 interior=0.027 het-quartiles=[0.01, 0.011, 0.021, 0.042] zones={'field interior': 0.011, 'field edge': 0.009, 'outside fields': 0.032}

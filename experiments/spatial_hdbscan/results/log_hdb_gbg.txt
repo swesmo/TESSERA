@@ -1,0 +1,8 @@
+HDBSCAN pca16 eom mcs=100 assign=knn                         k_found=5.100 coherence=0.980 ARI_mean=0.988 ARI_min=0.966 max_share=0.933 k_eff=1.401 noise=0.090 t_fit=1.095 t_assign=1.744
+HDBSCAN pca16 eom mcs=100 assign=knn | k-means same k        k_found=5.100 coherence=0.824 ARI_mean=0.904 ARI_min=0.751 max_share=0.304 k_eff=4.543
+HDBSCAN pca16 leaf mcs=100 assign=knn                        k_found=22.400 coherence=0.582 ARI_mean=0.601 ARI_min=0.460 max_share=0.112 k_eff=17.695 noise=0.752 t_fit=1.073 t_assign=0.510
+HDBSCAN pca16 leaf mcs=100 assign=knn | k-means same k       k_found=22.400 coherence=0.593 ARI_mean=0.832 ARI_min=0.744 max_share=0.093 k_eff=19.936
+HDBSCAN pca16 leaf mcs=100 assign=centroid                   k_found=22.400 coherence=0.580 ARI_mean=0.642 ARI_min=0.510 max_share=0.097 k_eff=18.866 noise=0.752 t_fit=1.074 t_assign=0.025
+HDBSCAN pca16 leaf mcs=100 assign=centroid | k-means same k  k_found=22.400 coherence=0.593 ARI_mean=0.832 ARI_min=0.744 max_share=0.093 k_eff=19.936
+HDBSCAN pca16 leaf mcs=400 assign=knn                        k_found=5.500 coherence=0.808 ARI_mean=0.569 ARI_min=0.377 max_share=0.363 k_eff=4.589 noise=0.727 t_fit=1.114 t_assign=0.562
+HDBSCAN pca16 leaf mcs=400 assign=knn | k-means same k       k_found=5.500 coherence=0.815 ARI_mean=0.661 ARI_min=0.427 max_share=0.325 k_eff=4.853

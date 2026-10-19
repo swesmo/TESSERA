@@ -1,0 +1,43 @@
+{
+ "H": 385,
+ "W": 720,
+ "k": 5,
+ "seeds": [
+  42,
+  7
+ ],
+ "runs": [
+  {
+   "method": "kmeans",
+   "seed": 42
+  },
+  {
+   "method": "kmeans",
+   "seed": 7
+  },
+  {
+   "method": "stable",
+   "seed": 42
+  },
+  {
+   "method": "stable",
+   "seed": 7
+  },
+  {
+   "method": "smooth",
+   "seed": 42
+  },
+  {
+   "method": "smooth",
+   "seed": 7
+  },
+  {
+   "method": "gauss",
+   "seed": 42
+  },
+  {
+   "method": "gauss",
+   "seed": 7
+  }
+ ]
+}
