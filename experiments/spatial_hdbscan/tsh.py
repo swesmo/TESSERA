@@ -345,7 +345,8 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
         #print("the cost is: ", c)
         return c
     #print("-------------------------------------------------")
-    while len(groups) > k:
+    auto_k = True
+    while len(groups) > k and auto_k:
         keys = list(groups)
         if method == "ward":  # vectorised over all active pairs
             ki = np.array(keys)
@@ -356,6 +357,8 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
                 Cm = Cm / (1 + gamma * A[np.ix_(ki, ki)] / np.sqrt(np.maximum(P[:, None] * P[None], 1e-9)))
             np.fill_diagonal(Cm, np.inf)
             test_var = Cm.min()
+            if len(groups) < 15 and test_var > 3.5 * np.average(test_Cm_min_list):
+                auto_k = False
             #print("Cm.min(): ", test_var)
             i, j = np.unravel_index(Cm.argmin(), Cm.shape)
             a, b = int(ki[min(i, j)]), int(ki[max(i, j)])
@@ -378,6 +381,7 @@ def merge_tree(C, n, k, method="ward", A=None, gamma=0.0):
 
     print("The different Cm_min:", test_Cm_min_list)
     print(percentage_difference(test_Cm_min_list))
+    print("final k: ", len(groups))
     return lut
 
 def evaluate_final_clusters(C, n, k, method="ward", A=None, gamma=0.0):
